@@ -20,7 +20,8 @@ const productSchema = new mongoose.Schema({
     },
     originalPrice: {
         type: Number,
-        required: [true, 'Original price is required'],
+        // FIX: This field is now optional to match the frontend UI.
+        // It is only used to calculate and display a discount.
         min: [0, 'Original price cannot be negative'],
     },
     description: {
