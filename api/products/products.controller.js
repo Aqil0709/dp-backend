@@ -1,5 +1,5 @@
 // backend/controllers/productController.js
-const Product = require('../models/product.model'); // <-- IMPORT the new Product model
+const Product = require('../../models/product.model'); // <-- IMPORT the new Product model
 const fs = require('fs');
 const path = require('path');
 

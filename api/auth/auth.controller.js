@@ -1,6 +1,6 @@
 // backend/api/auth/auth.controller.js
 
-const User = require('../models/user.model'); // <-- IMPORT the new User model
+const User = require('../../models/user.model'); // <-- IMPORT the new User model
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const fetch = require('node-fetch');

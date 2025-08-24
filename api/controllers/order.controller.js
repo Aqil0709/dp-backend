@@ -1,10 +1,10 @@
 // backend/api/orders/order.controller.js
 
 const mongoose = require('mongoose');
-const Order = require('../models/order.model');
-const User = require('../models/user.model');
-const Cart = require('../models/cart.model');
-const Product = require('../models/product.model');
+const Order = require('../../models/order.model');
+const User = require('../../models/user.model');
+const Cart = require('../../models/cart.model');
+const Product = require('../../models/product.model');
 const { fetchUserCartDetails } = require('../cart/cart.controller');
 
 const getAllOrders = async (req, res) => {

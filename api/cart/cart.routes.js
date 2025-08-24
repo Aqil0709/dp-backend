@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+
+// Ensure the imported functions match the new Mongoose controller's exports
 const { getCart, addToCart, updateCartItem, removeCartItem } = require('./cart.controller');
 
 // GET /api/cart/:userId - Get a user's cart

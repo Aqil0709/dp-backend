@@ -1,6 +1,6 @@
 // backend/api/profile/profile.controller.js
 
-const User = require('../models/user.model');
+const User = require('../../models/user.model');
 
 // --- User Profile ---
 const updateUserProfile = async (req, res) => {

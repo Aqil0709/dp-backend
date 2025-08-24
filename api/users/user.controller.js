@@ -1,6 +1,6 @@
 // backend/api/users/user.controller.js
 
-const User = require('../models/user.model');
+const User = require('../../models/user.model');
 
 // @desc    Get all users
 // @route   GET /api/users

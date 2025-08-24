@@ -1,104 +1,107 @@
-// backend/api/cart/cart.controller.js
+const Cart = require('../../models/cart.model');
+const mongoose = require('mongoose');
 
-const Cart = require('../models/cart.model');
-const Product = require('../models/product.model');
-
-// --- Helper function to fetch full cart details (replaces the old SQL JOIN) ---
-const fetchUserCartDetails = async (userId) => {
-    // Find the user's cart and use .populate() to get all product details
-    const cart = await Cart.findOne({ user: userId }).populate({
-        path: 'items.product',
-        model: 'Product'
-    });
-
-    if (!cart) {
-        return { items: [], _id: null }; // Return a default structure if no cart
-    }
-    return cart;
+/**
+ * @description Helper function to format the cart data into the structure 
+ * the frontend expects. The frontend needs a simple array of items.
+ * @param {object} cart - The full cart object from Mongoose.
+ * @returns {Array} - An array of cart items.
+ */
+const formatCart = (cart) => {
+    if (!cart || !cart.items) return [];
+    // The frontend expects an array of objects, each containing the product details and quantity.
+    // The .populate() method in the main functions will have already nested the product data.
+    return cart.items.map(item => ({
+        product: item.product,
+        quantity: item.quantity,
+    }));
 };
 
+/**
+ * @description Fetches a user's cart and populates the product details for each item.
+ */
 const getCart = async (req, res) => {
-    const { userId } = req.params;
     try {
-        const cart = await fetchUserCartDetails(userId);
-        res.status(200).json(cart.items); // Send back just the items array
+        // Find the cart for the given user and populate the 'product' field in each cart item.
+        const cart = await Cart.findOne({ user: req.params.userId }).populate('items.product');
+        if (!cart) {
+            // If the user doesn't have a cart yet, return an empty array. This is expected.
+            return res.status(200).json([]);
+        }
+        res.status(200).json(formatCart(cart));
     } catch (error) {
         console.error('Get cart error:', error);
         res.status(500).json({ message: 'Server error while fetching cart.' });
     }
 };
 
+/**
+ * @description Adds a product to the cart. If the product is already in the cart, 
+ * it increments the quantity. If there's no cart, it creates one.
+ */
 const addToCart = async (req, res) => {
     const { userId } = req.params;
-    const { id: productId, quantity = 1 } = req.body; // Default quantity to 1
+    const { id: productId } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+        return res.status(400).json({ message: 'Invalid product ID.' });
+    }
 
     try {
-        // 1. Find the user's cart or create a new one if it doesn't exist
+        // Find the user's cart, or create a new one if it doesn't exist.
         let cart = await Cart.findOne({ user: userId });
         if (!cart) {
             cart = new Cart({ user: userId, items: [] });
         }
 
-        // 2. Check if the product being added actually exists
-        const product = await Product.findById(productId);
-        if (!product) {
-            return res.status(404).json({ message: 'Product not found.' });
-        }
-        
-        // 3. Check if the product is already in the cart
-        const itemIndex = cart.items.findIndex(item => item.product.equals(productId));
+        // Check if the product already exists in the cart.
+        const itemIndex = cart.items.findIndex(item => item.product.toString() === productId);
 
         if (itemIndex > -1) {
-            // If item exists, update the quantity
-            cart.items[itemIndex].quantity += quantity;
+            // If it exists, increment the quantity.
+            cart.items[itemIndex].quantity += 1;
         } else {
-            // If item doesn't exist, add it to the items array
-            cart.items.push({ product: productId, quantity: quantity });
+            // If it's a new product, add it to the items array.
+            cart.items.push({ product: productId, quantity: 1 });
         }
 
-        // 4. Save the cart to the database
         await cart.save();
-
-        // 5. Fetch the updated, populated cart and send it back
-        const updatedCart = await fetchUserCartDetails(userId);
-        res.status(200).json(updatedCart.items);
-
+        // Populate the product details before sending the response.
+        await cart.populate('items.product');
+        res.status(200).json(formatCart(cart));
     } catch (error) {
         console.error('Add to cart error:', error);
         res.status(500).json({ message: 'Server error while adding to cart.' });
     }
 };
 
+/**
+ * @description Updates the quantity of a specific item in the cart.
+ */
 const updateCartItem = async (req, res) => {
     const { userId, productId } = req.params;
     const { quantity } = req.body;
 
-    if (quantity === undefined || quantity < 0) {
-        return res.status(400).json({ message: 'A valid quantity is required.' });
+    if (quantity <= 0) {
+        // If quantity is 0 or less, it should be removed. We can call the remove function.
+        return removeCartItem(req, res);
     }
 
     try {
         const cart = await Cart.findOne({ user: userId });
         if (!cart) {
-            return res.status(404).json({ message: 'Cart not found.' });
+            return res.status(404).json({ message: "Cart not found." });
         }
 
-        const itemIndex = cart.items.findIndex(item => item.product.equals(productId));
+        const itemIndex = cart.items.findIndex(item => item.product.toString() === productId);
 
         if (itemIndex > -1) {
-            if (quantity > 0) {
-                // Update quantity if it's greater than 0
-                cart.items[itemIndex].quantity = quantity;
-            } else {
-                // Remove item if quantity is 0 or less
-                cart.items.splice(itemIndex, 1);
-            }
-            
+            cart.items[itemIndex].quantity = quantity;
             await cart.save();
-            const updatedCart = await fetchUserCartDetails(userId);
-            res.status(200).json(updatedCart.items);
+            await cart.populate('items.product');
+            res.status(200).json(formatCart(cart));
         } else {
-            res.status(404).json({ message: 'Item not found in cart.' });
+            res.status(404).json({ message: "Product not in cart." });
         }
     } catch (error) {
         console.error('Update cart item error:', error);
@@ -106,26 +109,28 @@ const updateCartItem = async (req, res) => {
     }
 };
 
+/**
+ * @description Removes a product from the user's cart. This is the direct fix for your issue.
+ */
 const removeCartItem = async (req, res) => {
     const { userId, productId } = req.params;
 
     try {
-        const cart = await Cart.findOne({ user: userId });
+        // Find the user's cart and update it by "pulling" the item from the items array.
+        const cart = await Cart.findOneAndUpdate(
+            { user: userId },
+            // Use the $pull operator to remove any item from the 'items' array
+            // where the 'product' field matches the productId.
+            { $pull: { items: { product: productId } } },
+            // { new: true } ensures the updated cart is returned.
+            { new: true }
+        ).populate('items.product');
+
         if (!cart) {
-            return res.status(404).json({ message: 'Cart not found.' });
+            return res.status(404).json({ message: "Cart not found." });
         }
 
-        const initialLength = cart.items.length;
-        // Mongoose's pull method is great for removing subdocuments
-        cart.items.pull({ product: productId });
-
-        if (cart.items.length < initialLength) {
-            await cart.save();
-            const updatedCart = await fetchUserCartDetails(userId);
-            res.status(200).json(updatedCart.items);
-        } else {
-            res.status(404).json({ message: 'Item not found in cart.' });
-        }
+        res.status(200).json(formatCart(cart));
     } catch (error) {
         console.error('Remove cart item error:', error);
         res.status(500).json({ message: 'Server error while removing cart item.' });
@@ -137,5 +142,4 @@ module.exports = {
     addToCart,
     updateCartItem,
     removeCartItem,
-    fetchUserCartDetails // We export this to use in the order controller later
 };
