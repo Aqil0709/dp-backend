@@ -23,13 +23,28 @@ const app = express();
 const PORT = process.env.PORT || 5002;
 
 // --- CORS Configuration ---
+// --- FIX: The 'origin' property should be an array of allowed URLs ---
+const allowedOrigins = [
+    process.env.FRONTEND_URL || 'https://aaisahebvastram.com',
+    'http://localhost:3000'
+];
+
 const corsOptions = {
-    origin: process.env.FRONTEND_URL || 'https://aaisahebvastram.com',
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
 };
 app.use(cors(corsOptions));
+
 
 // --- MIDDLEWARE ---
 app.use(express.json());
