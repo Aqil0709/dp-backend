@@ -24,8 +24,9 @@ const authenticate = (req, res, next) => {
         console.log("Auth Middleware: Token decoded successfully. Decoded Payload:", decodedToken);
 
         // Attach user data (userId and role) to the request object
-        req.userData = { userId: decodedToken.userId, role: decodedToken.role };
-        console.log("Auth Middleware: req.userData set to:", req.userData);
+        // IMPORTANT: The controller now needs to use req.userData.userId instead of req.user._id
+        req.user = { _id: decodedToken.userId, role: decodedToken.role }; 
+        console.log("Auth Middleware: req.user set to:", req.user);
 
         next(); // Proceed to the next middleware or route handler
     } catch (error) {
@@ -39,9 +40,9 @@ const authenticate = (req, res, next) => {
 
 // Middleware to authorize only admin users
 const authorizeAdmin = (req, res, next) => {
-    // This middleware assumes 'authenticate' has already run and attached req.userData
-    console.log("Auth Middleware: Authorize Admin check. req.userData:", req.userData);
-    if (!req.userData || req.userData.role !== 'admin') {
+    // This middleware assumes 'authenticate' has already run and attached req.user
+    console.log("Auth Middleware: Authorize Admin check. req.user:", req.user);
+    if (!req.user || req.user.role !== 'admin') {
         return res.status(403).json({ message: 'Forbidden: You are not authorized to perform this action.' });
     }
     next(); // User is an admin, proceed

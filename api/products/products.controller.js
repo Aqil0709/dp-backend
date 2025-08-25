@@ -1,5 +1,11 @@
-// backend/controllers/productController.js
-const Product = require('../../models/product.model'); // <-- IMPORT the new Product model
+/*
+  STEP 1: 
+  This is the complete code for your `product.controller.js` file.
+*/
+
+// backend/controllers/product.controller.js
+const Product = require('../../models/product.model');
+const Review = require('../../models/review.model');
 const fs = require('fs');
 const path = require('path');
 
@@ -15,7 +21,7 @@ const getFilenameFromUrl = (url) => {
 
 const deleteFile = (filename) => {
     if (!filename) return;
-    const filePath = path.join(__dirname, '../public/uploads', filename);
+    const filePath = path.join(__dirname, '../../public/uploads', filename);
     fs.unlink(filePath, (err) => {
         if (err && err.code !== 'ENOENT') {
             console.error(`Error deleting file ${filePath}:`, err);
@@ -28,7 +34,6 @@ const deleteFile = (filename) => {
 // --- PUBLIC ---
 const getAllProducts = async (req, res) => {
     try {
-        // MONGO: Simply find all products. The quantity is now part of the document.
         const products = await Product.find({}).sort({ createdAt: -1 });
         res.status(200).json(products);
     } catch (error) {
@@ -39,7 +44,6 @@ const getAllProducts = async (req, res) => {
 
 const getProductById = async (req, res) => {
     try {
-        // MONGO: Find a single product by its ID.
         const product = await Product.findById(req.params.productId);
         if (!product) {
             return res.status(404).json({ message: 'Product not found.' });
@@ -51,6 +55,7 @@ const getProductById = async (req, res) => {
     }
 };
 
+
 // --- ADMIN ONLY ---
 const addProduct = async (req, res) => {
     const { name, category, price, originalPrice, description, quantity } = req.body;
@@ -60,11 +65,10 @@ const addProduct = async (req, res) => {
     }
 
     const imageURLs = req.files.map(file =>
-        `${req.protocol}://${req.get('host')}/public/uploads/${file.filename}`
+        `/public/uploads/${file.filename}`
     );
 
     try {
-        // MONGO: Create a new product with all data in a single operation.
         const newProduct = await Product.create({
             name,
             category,
@@ -77,7 +81,6 @@ const addProduct = async (req, res) => {
         res.status(201).json(newProduct);
     } catch (error) {
         console.error('Add product error:', error);
-        // If DB insertion fails, clean up the uploaded files.
         imageURLs.forEach(url => deleteFile(getFilenameFromUrl(url)));
         res.status(500).json({ message: 'Server error while adding product.' });
     }
@@ -94,15 +97,12 @@ const updateProduct = async (req, res) => {
         }
 
         let finalImageURLs = product.images;
-        const oldImageURLs = [...product.images]; // Copy old URLs for comparison
+        const oldImageURLs = [...product.images];
 
-        // Logic for handling image updates and deleting old files from disk
         if (req.files && req.files.length > 0) {
-            // New files uploaded, replace all old ones
-            finalImageURLs = req.files.map(file => `${req.protocol}://${req.get('host')}/public/uploads/${file.filename}`);
+            finalImageURLs = req.files.map(file => `/public/uploads/${file.filename}`);
             oldImageURLs.forEach(url => deleteFile(getFilenameFromUrl(url)));
         } else if (currentImageUrlsToRetain) {
-            // No new files, but some existing images might have been removed
             const retainedUrls = JSON.parse(currentImageUrlsToRetain);
             finalImageURLs = retainedUrls;
             const urlsToDelete = oldImageURLs.filter(url => !retainedUrls.includes(url));
@@ -113,7 +113,6 @@ const updateProduct = async (req, res) => {
             return res.status(400).json({ message: 'At least one product image is required.' });
         }
         
-        // MONGO: Update the fields of the found product document
         product.name = name;
         product.category = category;
         product.price = price;
@@ -122,13 +121,11 @@ const updateProduct = async (req, res) => {
         product.quantity = quantity;
         product.images = finalImageURLs;
 
-        // MONGO: Save the updated document
         const updatedProduct = await product.save();
         res.status(200).json(updatedProduct);
 
     } catch (error) {
         console.error('Update product error:', error);
-        // If DB update fails, clean up any newly uploaded files
         if (req.files) {
             req.files.forEach(file => deleteFile(file.filename));
         }
@@ -140,16 +137,13 @@ const deleteProduct = async (req, res) => {
     const { productId } = req.params;
 
     try {
-        // MONGO: Find the product to get its image URLs before deleting
         const product = await Product.findById(productId);
         if (!product) {
             return res.status(404).json({ message: 'Product not found.' });
         }
 
-        // Delete image files from the server's storage
         product.images.forEach(url => deleteFile(getFilenameFromUrl(url)));
 
-        // MONGO: Delete the product document from the database
         await Product.findByIdAndDelete(productId);
         
         res.status(200).json({ message: 'Product deleted successfully.' });
@@ -159,10 +153,75 @@ const deleteProduct = async (req, res) => {
     }
 };
 
+
+// --- REVIEW FUNCTIONALITY ---
+const createProductReview = async (req, res) => {
+    const { rating, comment, productId } = req.body;
+    
+    if (!req.user || !req.user._id) {
+        return res.status(401).json({ message: 'Authentication error, user not found.' });
+    }
+    
+    const userId = req.user._id;
+
+    try {
+        const product = await Product.findById(productId);
+        if (!product) {
+            return res.status(404).json({ message: "Product not found." });
+        }
+
+        const alreadyReviewed = await Review.findOne({ product: productId, user: userId });
+        if (alreadyReviewed) {
+            return res.status(400).json({ message: 'You have already submitted a review for this product.' });
+        }
+
+        const review = await Review.create({
+            rating,
+            comment,
+            product: productId,
+            user: userId,
+        });
+
+        const reviews = await Review.find({ product: productId });
+        const numOfReviews = reviews.length;
+        const totalRating = reviews.reduce((acc, item) => item.rating + acc, 0);
+        
+        product.ratings = totalRating / numOfReviews;
+        product.numOfReviews = numOfReviews;
+        await product.save({ validateBeforeSave: false });
+
+        res.status(201).json({ success: true, review });
+
+    } catch (error) {
+        console.error('Create product review error:', error);
+        res.status(500).json({ message: 'Server error while submitting review.' });
+    }
+};
+
+const getProductReviews = async (req, res) => {
+    try {
+        const { productId } = req.params;
+        
+        // --- FIX: Populate the user's name from the User collection ---
+        // This tells the database to find the user associated with each review
+        // and include their 'name' in the response.
+        const reviews = await Review.find({ product: productId })
+            .populate('user', 'name') // This is the line that fetches the user's name
+            .sort({ createdAt: -1 }); // This sorts to show the newest reviews first
+        
+        res.status(200).json(reviews);
+    } catch (error) {
+        console.error('Error fetching product reviews:', error);
+        res.status(500).json({ message: 'Server error while fetching reviews.' });
+    }
+};
+
 module.exports = {
     getAllProducts,
     getProductById,
     addProduct,
     updateProduct,
     deleteProduct,
+    createProductReview,
+    getProductReviews,
 };

@@ -6,9 +6,6 @@ const User = require('../../models/user.model');
 const Cart = require('../../models/cart.model');
 const Product = require('../../models/product.model');
 
-// This function is no longer needed as we will perform the cart lookup inside the transaction
-// const { fetchUserCartDetails } = require('../cart/cart.controller'); 
-
 const getAllOrders = async (req, res) => {
     try {
         const orders = await Order.find({})
@@ -23,7 +20,8 @@ const getAllOrders = async (req, res) => {
 
 const getMyOrders = async (req, res) => {
     try {
-        const orders = await Order.find({ user: req.userData.userId }).sort({ createdAt: -1 });
+        // FIX: Changed req.userData.userId to req.user._id to match the auth middleware
+        const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 });
         res.status(200).json(orders);
     } catch (error) {
         console.error("Error in getMyOrders:", error);
@@ -34,7 +32,8 @@ const getMyOrders = async (req, res) => {
 const getOrderStatus = async (req, res) => {
     const { orderId } = req.params;
     try {
-        const order = await Order.findOne({ _id: orderId, user: req.userData.userId });
+        // FIX: Changed req.userData.userId to req.user._id
+        const order = await Order.findOne({ _id: orderId, user: req.user._id });
         if (!order) {
             return res.status(404).json({ message: 'Order not found.' });
         }
@@ -75,9 +74,7 @@ const createCashOnDeliveryOrder = async (req, res) => {
     try {
         session.startTransaction();
 
-        // --- FIX: Fetch the user's cart *within* the transaction session ---
         const user = await User.findById(userId).session(session);
-        // Populate product details within the cart itself
         const cart = await Cart.findOne({ user: userId }).populate('items.product').session(session);
 
         if (!cart || cart.items.length === 0) {
@@ -93,14 +90,12 @@ const createCashOnDeliveryOrder = async (req, res) => {
         let totalAmount = 0;
 
         for (const item of cart.items) {
-            // The product data is already populated from the cart query
             const product = item.product; 
 
             if (!product || product.quantity < item.quantity) {
                 throw new Error(`Insufficient stock for product "${product.name}".`);
             }
 
-            // --- FIX: Update the product stock directly within the transaction ---
             await Product.updateOne(
                 { _id: product._id },
                 { $inc: { quantity: -item.quantity } },
@@ -127,7 +122,6 @@ const createCashOnDeliveryOrder = async (req, res) => {
         });
         await order.save({ session });
 
-        // --- FIX: Clear the user's cart correctly within the transaction ---
         cart.items = [];
         await cart.save({ session });
 
@@ -151,7 +145,8 @@ const createPendingUpiOrder = (req, res) => {
 
 const cancelOrderController = async (req, res) => {
     const { orderId } = req.params;
-    const { userId } = req.userData;
+    // FIX: Changed from req.userData to req.user._id
+    const userId = req.user._id;
     
     const session = await mongoose.startSession();
 
