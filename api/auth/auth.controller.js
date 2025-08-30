@@ -1,5 +1,3 @@
-// backend/api/auth/auth.controller.js
-
 const User = require('../../models/user.model'); // <-- IMPORT the new User model
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -141,10 +139,10 @@ const resetPassword = async (req, res) => {
 
 // --- Register User ---
 const registerUser = async (req, res) => {
-    const { mobileNumber, password, name } = req.body;
+    const { mobileNumber, password, fullName } = req.body;
 
-    if (!mobileNumber || !password) {
-        return res.status(400).json({ message: 'Mobile number and password are required.' });
+    if (!mobileNumber || !password || !fullName) {
+        return res.status(400).json({ message: 'Mobile number, password, and full name are required.' });
     }
 
     try {
@@ -159,7 +157,7 @@ const registerUser = async (req, res) => {
 
         // MONGO: Create and save the new user
         const user = await User.create({
-            name: name || mobileNumber,
+            name: fullName,
             mobileNumber,
             password: hashedPassword,
         });
@@ -180,7 +178,8 @@ const registerUser = async (req, res) => {
             message: 'Registration successful.'
         });
 
-    } catch (error) {
+    } catch (error)
+        {
         console.error('Registration error:', error);
         res.status(500).json({ message: 'Server error during registration.' });
     }

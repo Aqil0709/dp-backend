@@ -1,5 +1,3 @@
-// backend/models/product.model.js
-
 const mongoose = require('mongoose');
 
 const productSchema = new mongoose.Schema({
@@ -20,8 +18,6 @@ const productSchema = new mongoose.Schema({
     },
     originalPrice: {
         type: Number,
-        // FIX: This field is now optional to match the frontend UI.
-        // It is only used to calculate and display a discount.
         min: [0, 'Original price cannot be negative'],
     },
     description: {
@@ -41,6 +37,15 @@ const productSchema = new mongoose.Schema({
         required: [true, 'Stock quantity is required'],
         min: [0, 'Quantity cannot be negative'],
         default: 0,
+    },
+    // --- NEW: Added fields for special/trending products ---
+    isSpecial: {
+        type: Boolean,
+        default: false, // Products are not special by default
+    },
+    isTrending: {
+        type: Boolean,
+        default: false, // Products are not trending by default
     },
 }, {
     timestamps: true, // Automatically adds `createdAt` and `updatedAt` fields

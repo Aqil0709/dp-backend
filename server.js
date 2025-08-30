@@ -1,5 +1,3 @@
-// backend/server.js
-
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -13,7 +11,8 @@ connectDB(); // 2. CALL the connection function
 const authRoutes = require('./api/auth/auth.routes');
 const cartRoutes = require('./api/cart/cart.routes');
 const profileRoutes = require('./api/profile/profile.routes');
-const productRoutes = require('./api/products/products.routes');
+// --- THIS IS THE FIX: The path now points to the file's actual location ---
+const productRoutes = require('./api/products/products.routes'); 
 const orderRoutes = require('./api/orders/order.routes');
 const stockRoutes = require('./api/stock/stock.routes');
 const userRoutes = require('./api/users/user.routes');
@@ -23,7 +22,6 @@ const app = express();
 const PORT = process.env.PORT || 5002;
 
 // --- CORS Configuration ---
-// --- FIX: The 'origin' property should be an array of allowed URLs ---
 const allowedOrigins = [
     process.env.FRONTEND_URL || 'https://aaisahebvastram.com',
     'http://localhost:3000'
@@ -31,7 +29,6 @@ const allowedOrigins = [
 
 const corsOptions = {
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
         if (allowedOrigins.indexOf(origin) === -1) {
             const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
@@ -84,3 +81,4 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
     console.log(`Backend server is running on port ${PORT}`);
 });
+
