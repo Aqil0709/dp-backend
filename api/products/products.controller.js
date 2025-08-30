@@ -1,3 +1,4 @@
+/* global __app_id */
 const Product = require('../../models/product.model');
 const Review = require('../../models/review.model');
 const fs = require('fs');
@@ -15,7 +16,7 @@ const getFilenameFromUrl = (url) => {
 
 const deleteFile = (filename) => {
     if (!filename) return;
-    const filePath = path.join(__dirname, '../../public/uploads', filename);
+    const filePath = path.join(__dirname, '../../../public/uploads', filename);
     fs.unlink(filePath, (err) => {
         if (err && err.code !== 'ENOENT') {
             console.error(`Error deleting file ${filePath}:`, err);
@@ -66,12 +67,11 @@ const addProduct = async (req, res) => {
         const newProduct = await Product.create({
             name,
             category,
-            price,
-            originalPrice,
+            price: Number(price),
+            originalPrice: Number(originalPrice),
             description,
-            quantity,
+            quantity: Number(quantity),
             images: imageURLs,
-            // --- FIX: Ensure boolean conversion on creation ---
             isSpecial: isSpecial === 'true',
             isTrending: isTrending === 'true',
         });
@@ -83,9 +83,27 @@ const addProduct = async (req, res) => {
     }
 };
 
+// --- FIX: Updated to handle both form-data and JSON requests ---
 const updateProduct = async (req, res) => {
     const { productId } = req.params;
-    const { name, category, price, originalPrice, description, quantity, isSpecial, isTrending, currentImageUrlsToRetain } = req.body;
+    const contentType = req.headers['content-type'];
+    let updateData = req.body;
+
+    // If the request is not form-data, we need to manually parse booleans and numbers
+    if (!contentType || !contentType.includes('multipart/form-data')) {
+        if (updateData.price !== undefined) updateData.price = Number(updateData.price);
+        if (updateData.originalPrice !== undefined) updateData.originalPrice = Number(updateData.originalPrice);
+        if (updateData.quantity !== undefined) updateData.quantity = Number(updateData.quantity);
+        if (updateData.isSpecial !== undefined) updateData.isSpecial = updateData.isSpecial === 'true';
+        if (updateData.isTrending !== undefined) updateData.isTrending = updateData.isTrending === 'true';
+    } else {
+        // For form-data, some fields may be strings, so convert them
+        if (updateData.price) updateData.price = Number(updateData.price);
+        if (updateData.originalPrice) updateData.originalPrice = Number(updateData.originalPrice);
+        if (updateData.quantity) updateData.quantity = Number(updateData.quantity);
+        if (updateData.isSpecial) updateData.isSpecial = updateData.isSpecial === 'true';
+        if (updateData.isTrending) updateData.isTrending = updateData.isTrending === 'true';
+    }
 
     try {
         const product = await Product.findById(productId);
@@ -102,8 +120,8 @@ const updateProduct = async (req, res) => {
         if (req.files && req.files.length > 0) {
             finalImageURLs = req.files.map(file => `/public/uploads/${file.filename}`);
             oldImageURLs.forEach(url => deleteFile(getFilenameFromUrl(url)));
-        } else if (currentImageUrlsToRetain) {
-            const retainedUrls = JSON.parse(currentImageUrlsToRetain);
+        } else if (updateData.currentImageUrlsToRetain) {
+            const retainedUrls = JSON.parse(updateData.currentImageUrlsToRetain);
             finalImageURLs = retainedUrls;
             const urlsToDelete = oldImageURLs.filter(url => !retainedUrls.includes(url));
             urlsToDelete.forEach(url => deleteFile(getFilenameFromUrl(url)));
@@ -116,24 +134,9 @@ const updateProduct = async (req, res) => {
             return res.status(400).json({ message: 'At least one product image is required.' });
         }
         
-        product.name = name;
-        product.category = category;
-        // --- FIX: Convert price fields to numbers.
-        product.price = parseFloat(price);
-        product.originalPrice = originalPrice ? parseFloat(originalPrice) : undefined;
-        product.description = description;
-        // --- FIX: Convert quantity to a number.
-        product.quantity = parseInt(quantity, 10);
+        // Apply updates from the request body
+        Object.assign(product, updateData);
         product.images = finalImageURLs;
-
-        // --- THE FIX: Explicitly convert form data strings to booleans ---
-        // This ensures that "false" is correctly interpreted as false.
-        if (isSpecial !== undefined) {
-            product.isSpecial = isSpecial === 'true';
-        }
-        if (isTrending !== undefined) {
-            product.isTrending = isTrending === 'true';
-        }
 
         const updatedProduct = await product.save();
         res.status(200).json(updatedProduct);
@@ -144,29 +147,6 @@ const updateProduct = async (req, res) => {
             req.files.forEach(file => deleteFile(file.filename));
         }
         res.status(500).json({ message: 'Server error while updating product.' });
-    }
-};
-
-// --- NEW: Controller to update product status fields without a file upload ---
-const updateProductStatus = async (req, res) => {
-    const { productId } = req.params;
-    const updateFields = req.body; // Expects a JSON body like { isSpecial: true }
-
-    try {
-        const updatedProduct = await Product.findByIdAndUpdate(
-            productId,
-            { $set: updateFields },
-            { new: true, runValidators: true }
-        );
-
-        if (!updatedProduct) {
-            return res.status(404).json({ message: 'Product not found.' });
-        }
-
-        res.status(200).json({ message: 'Product status updated successfully.', product: updatedProduct });
-    } catch (error) {
-        console.error('Error updating product status:', error);
-        res.status(500).json({ message: 'Server error while updating product status.' });
     }
 };
 
@@ -250,13 +230,49 @@ const getProductReviews = async (req, res) => {
     }
 };
 
+// --- NEW: Controller to update a product's special/trending status ---
+const updateProductStatus = async (req, res) => {
+    const { productId } = req.params;
+    const { isSpecial, isTrending } = req.body;
+
+    if (isSpecial === undefined && isTrending === undefined) {
+        return res.status(400).json({ message: 'At least one status field (isSpecial or isTrending) is required.' });
+    }
+
+    try {
+        const updatedFields = {};
+        if (isSpecial !== undefined) {
+            updatedFields.isSpecial = isSpecial;
+        }
+        if (isTrending !== undefined) {
+            updatedFields.isTrending = isTrending;
+        }
+
+        const updatedProduct = await Product.findByIdAndUpdate(
+            productId,
+            { $set: updatedFields },
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedProduct) {
+            return res.status(404).json({ message: 'Product not found.' });
+        }
+
+        res.status(200).json({ message: 'Product status updated successfully.', product: updatedProduct });
+
+    } catch (error) {
+        console.error('Error updating product status:', error);
+        res.status(500).json({ message: 'Server error while updating product status.' });
+    }
+};
+
 module.exports = {
    getAllProducts,
     getProductById,
     addProduct,
     updateProduct,
     deleteProduct,
-    updateProductStatus, // <-- NEW: Export the new function
     createProductReview,
     getProductReviews,
+    updateProductStatus
 };
