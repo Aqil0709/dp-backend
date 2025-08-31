@@ -1,10 +1,15 @@
-// backend/api/orders/order.controller.js
-
 const mongoose = require('mongoose');
 const Order = require('../../models/order.model');
 const User = require('../../models/user.model');
 const Cart = require('../../models/cart.model');
 const Product = require('../../models/product.model');
+const Razorpay = require('razorpay');
+
+// Initialize Razorpay with API keys from environment variables
+const razorpayInstance = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
 
 const getAllOrders = async (req, res) => {
     try {
@@ -112,6 +117,10 @@ const createCashOnDeliveryOrder = async (req, res) => {
             totalAmount += item.quantity * product.price;
         }
 
+        // Add COD fee for COD orders
+        const codFee = 100;
+        totalAmount += codFee;
+
         const order = new Order({
             user: userId,
             orderItems,
@@ -135,6 +144,68 @@ const createCashOnDeliveryOrder = async (req, res) => {
         res.status(500).json({ message: error.message || 'Server error while placing order.' });
     } finally {
         session.endSession();
+    }
+};
+
+
+// ⚠️ NEW: Function to create a Razorpay order
+const createUpiOrder = async (req, res) => {
+    const { userId } = req.params;
+    const { deliveryAddressId } = req.body;
+
+    try {
+        const user = await User.findById(userId);
+        const cart = await Cart.findOne({ user: userId }).populate('items.product');
+
+        if (!cart || cart.items.length === 0) {
+            return res.status(400).json({ message: 'Cannot place an order with an empty cart.' });
+        }
+
+        const address = user.addresses.id(deliveryAddressId);
+        if (!address) {
+            return res.status(400).json({ message: 'Delivery address not found.' });
+        }
+
+        let totalAmount = cart.items.reduce((sum, item) => sum + item.quantity * item.product.price, 0);
+
+        // Create a new Razorpay order
+        const options = {
+            amount: totalAmount * 100, // amount in paisa
+            currency: "INR",
+            receipt: `receipt_order_${Date.now()}`,
+            payment_capture: 1, // Auto capture payment
+        };
+
+        const rzpOrder = await razorpayInstance.orders.create(options);
+
+        // Create a pending order in your database
+        const newOrder = new Order({
+            user: userId,
+            orderItems: cart.items.map(item => ({
+                product: item.product._id,
+                name: item.product.name,
+                quantity: item.quantity,
+                price: item.product.price,
+                image: item.product.images[0],
+            })),
+            shippingAddress: address,
+            totalAmount,
+            paymentMethod: 'UPI',
+            paymentStatus: 'Pending',
+            razorpayOrderId: rzpOrder.id,
+        });
+
+        await newOrder.save();
+
+        res.status(200).json({ 
+            message: 'Razorpay order created successfully.',
+            orderId: rzpOrder.id,
+            amount: rzpOrder.amount,
+            currency: rzpOrder.currency,
+        });
+    } catch (error) {
+        console.error('Error creating UPI order:', error);
+        res.status(500).json({ message: error.message || 'Server error while creating UPI order.' });
     }
 };
 
@@ -193,12 +264,51 @@ const cancelOrderController = async (req, res) => {
     }
 };
 
+// ⚠️ NEW: A verification endpoint is required to finalize the order after payment.
+const verifyUpiPayment = async (req, res) => {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+
+    const expectedSignature = crypto
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+        .update(body.toString())
+        .digest('hex');
+
+    if (expectedSignature === razorpay_signature) {
+        try {
+            // Find the pending order in your database and update its status
+            const order = await Order.findOneAndUpdate(
+                { razorpayOrderId: razorpay_order_id },
+                { paymentStatus: 'Paid', status: 'Processing' },
+                { new: true }
+            );
+
+            if (!order) {
+                return res.status(404).json({ success: false, message: 'Order not found for verification.' });
+            }
+
+            // Clear the user's cart after successful payment and stock update
+            await Cart.findOneAndUpdate({ user: order.user }, { items: [] });
+            
+            res.status(200).json({ success: true, message: 'Payment verified and order finalized.' });
+        } catch (error) {
+            console.error('Error verifying payment or finalizing order:', error);
+            res.status(500).json({ success: false, message: 'Internal server error during payment verification.' });
+        }
+    } else {
+        res.status(400).json({ success: false, message: 'Invalid payment signature.' });
+    }
+};
+
+
 module.exports = {
     getAllOrders,
-    createPendingUpiOrder,
+    createUpiOrder, // ⚠️ Replaced old placeholder
     createCashOnDeliveryOrder,
     getOrderStatus,
     getMyOrders,
     cancelOrderController,
-    updateOrderStatus
+    updateOrderStatus,
+    verifyUpiPayment, // ⚠️ New export
 };

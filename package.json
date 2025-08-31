@@ -15,6 +15,7 @@
     "node-fetch": "^2.7.0",
     "nodemailer": "^7.0.5",
     "nodemon": "^3.1.10",
+    "razorpay": "^2.9.6",
     "redis": "^5.8.2",
     "socket": "^1.0.104",
     "socket.io": "^4.8.1",

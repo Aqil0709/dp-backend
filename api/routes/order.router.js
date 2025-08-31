@@ -1,19 +1,34 @@
 const express = require('express');
 const router = express.Router();
-// Corrected: Import getAllOrders as well
-const { createPendingUpiOrder, getOrderStatus, getAllOrders } = require('../controllers/order.controller');
-// Assume you have an authentication middleware to get current user ID from token
-const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware'); // You need to implement this
+const {
+    getAllOrders,
+    createUpiOrder,
+    createCashOnDeliveryOrder,
+    getOrderStatus,
+    getMyOrders,
+    cancelOrderController,
+    updateOrderStatus,
+    verifyUpiPayment,
+} = require('../controllers/order.controller');
+const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware');
 
-// POST /api/orders/upi-initiate/:userId - Initiate a pending UPI order
-router.post('/upi-initiate/:userId', authenticate, createPendingUpiOrder);
+// Public route for UPI payment verification callback
+router.post('/payment/verify', verifyUpiPayment);
 
-// GET /api/orders/:userId/:orderId - Get status of an order (for polling or manual check)
-router.get('/:userId/:orderId', authenticate, getOrderStatus);
+// Authenticated routes
+router.use(authenticate);
 
-// NEW: GET /api/orders - Get all orders (Admin only)
-// This route is protected by authentication and requires admin role
-router.get('/', authenticate, authorizeAdmin, getAllOrders);
+// Order creation
+router.post('/cod/:userId', createCashOnDeliveryOrder);
+router.post('/upi/:userId', createUpiOrder);
 
+// User-specific orders
+router.get('/myorders', getMyOrders);
+router.get('/:orderId/status', getOrderStatus);
+router.post('/:orderId/cancel', cancelOrderController);
+
+// Admin-only route for updating order status (you'll need a separate admin middleware for this)
+router.put('/:orderId/status', updateOrderStatus);
+router.get('/', getAllOrders);
 
 module.exports = router;

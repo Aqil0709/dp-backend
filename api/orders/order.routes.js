@@ -1,47 +1,34 @@
 const express = require('express');
 const router = express.Router();
-// Correctly import all required controller functions directly
 const {
-    createPendingUpiOrder,
-    getOrderStatus,
     getAllOrders,
-    getMyOrders,
+    createUpiOrder,
     createCashOnDeliveryOrder,
+    getOrderStatus,
+    getMyOrders,
     cancelOrderController,
-    updateOrderStatus 
+    updateOrderStatus,
+    verifyUpiPayment,
 } = require('../controllers/order.controller');
 const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware');
 
-// POST /api/orders/upi-initiate/:userId - Initiate a pending UPI order
-router.post('/upi-initiate/:userId', authenticate, createPendingUpiOrder);
+// Public route for UPI payment verification callback
+router.post('/payment/verify', verifyUpiPayment);
 
-// GET /api/orders/:userId/:orderId - Get status of an order
-router.get('/:userId/:orderId', authenticate, getOrderStatus);
+// Authenticated routes
+router.use(authenticate);
 
-// GET /api/orders - Get all orders (Admin only)
-router.get('/', authenticate, authorizeAdmin, getAllOrders);
+// Order creation
+router.post('/cod/:userId', createCashOnDeliveryOrder);
+router.post('/upi/:userId', createUpiOrder);
 
-// --- CORRECTED ROUTE WITH DIAGNOSTIC LOGGING ---
-// PUT /api/orders/:orderId/status - Update an order's status (Admin only)
-router.put(
-    '/:orderId/status', 
-    authenticate, 
-    authorizeAdmin, 
-    // This new middleware will log a message if the route is successfully matched.
-    (req, res, next) => {
-        console.log('--- ROUTE HANDLER FOR /:orderId/status REACHED ---');
-        next(); // This passes the request to the next function, updateOrderStatus
-    },
-    updateOrderStatus
-);
+// User-specific orders
+router.get('/myorders', getMyOrders);
+router.get('/:orderId/status', getOrderStatus);
+router.post('/:orderId/cancel', cancelOrderController);
 
-// POST /api/orders/user/:userId/orders/cod - Create a Cash on Delivery order
-router.post('/user/:userId/orders/cod', authenticate, createCashOnDeliveryOrder);
-
-// GET /api/orders/my-orders - Get orders for the authenticated user
-router.get('/my-orders', authenticate, getMyOrders);
-
-// PUT /api/orders/:orderId/cancel - Cancel an order (User)
-router.put('/:orderId/cancel', authenticate, cancelOrderController);
+// Admin-only route for updating order status (you'll need a separate admin middleware for this)
+router.put('/:orderId/status', updateOrderStatus);
+router.get('/', getAllOrders);
 
 module.exports = router;
