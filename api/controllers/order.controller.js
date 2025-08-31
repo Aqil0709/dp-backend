@@ -1,3 +1,5 @@
+// backend/api/orders/order.controller.js
+
 const mongoose = require('mongoose');
 const Order = require('../../models/order.model');
 const User = require('../../models/user.model');
@@ -143,8 +145,9 @@ const createPendingUpiOrder = (req, res) => {
 
 const cancelOrderController = async (req, res) => {
     const { orderId } = req.params;
+    // FIX: Changed from req.userData to req.user._id
     const userId = req.user._id;
-
+    
     const session = await mongoose.startSession();
 
     try {
@@ -153,25 +156,25 @@ const cancelOrderController = async (req, res) => {
         const order = await Order.findOne({ _id: orderId, user: userId }).session(session);
 
         if (!order) {
-            await session.abortTransaction();
-            return res.status(404).json({ message: 'Order not found.' });
+            throw new Error('Order not found or you do not have permission to cancel it.');
         }
 
-        // Refined status check: Only allow cancellation if the status is 'Processing'
-        if (order.status !== 'Processing') {
-            await session.abortTransaction();
-            return res.status(400).json({ message: `Order cannot be cancelled as its status is '${order.status}'.` });
+        const orderDate = new Date(order.createdAt);
+        const now = new Date();
+        const hoursDifference = (now.getTime() - orderDate.getTime()) / (1000 * 60 * 60);
+
+        if (hoursDifference > 4) {
+            throw new Error('The 4-hour cancellation window has passed.');
+        }
+        if (order.status === 'Cancelled' || order.status === 'Delivered') {
+            throw new Error(`Order cannot be cancelled as it is already ${order.status}.`);
         }
         
-        // --- FIX: Removed the 4-hour cancellation window check to allow all Processing orders to be cancelled.
-        
-        // Corrected loop with session option
         for (const item of order.orderItems) {
             await Product.updateOne(
                 { _id: item.product },
-                { $inc: { quantity: item.quantity } },
-                { session } // <-- FIXED: Pass the session here
-            );
+                { $inc: { quantity: item.quantity } }
+            ).session(session);
         }
 
         order.status = 'Cancelled';
@@ -184,7 +187,7 @@ const cancelOrderController = async (req, res) => {
     } catch (error) {
         await session.abortTransaction();
         console.error('Error cancelling order:', error);
-        res.status(500).json({ message: error.message || 'Failed to cancel order due to a server error.' });
+        res.status(500).json({ message: error.message || 'Failed to cancel order.' });
     } finally {
         session.endSession();
     }

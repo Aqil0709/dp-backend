@@ -1,36 +1,47 @@
 const multer = require('multer');
 const path = require('path');
 
-// Set up storage engine
+// Set up storage engine for Multer to save files locally
 const storage = multer.diskStorage({
+    // The destination folder on your server where uploads will be stored.
+    // Use path.join for robust path resolution.
+    // Assuming 'api/middleware' is two levels deep from your backend root (e.g., 'backend/api/middleware')
+    // then '../../public/uploads' would point to 'backend/public/uploads'
     destination: function(req, file, cb) {
-        // This path should resolve to backend/public/uploads
-        cb(null, path.join(__dirname, '../../../public/uploads'));
+        cb(null, path.join(__dirname, '../../public/uploads'));
     },
+    
+    // The logic for naming the uploaded files to ensure they are unique.
     filename: function(req, file, cb){
+        // Creates a unique filename: timestamp.extension
+        // e.g., 1678886400000.png
         cb(null, Date.now() + path.extname(file.originalname));
     }
 });
 
-// Function to filter for image files
+// Function to check that only image files are uploaded
 function checkFileType(file, cb){
+    // Allowed file extensions
     const filetypes = /jpeg|jpg|png|gif/;
+    // Check the file extension
     const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    // Check the mime type (e.g., image/jpeg)
     const mimetype = filetypes.test(file.mimetype);
 
     if(mimetype && extname){
         return cb(null, true);
     } else {
-        cb(new Error('Error: Only image files are allowed!'));
+        // If the file is not an image, pass an error
+        // Multer will catch this error and pass it to your route handler
+        cb('Error: Only image files (jpeg, jpg, png, gif) are allowed!');
     }
 }
 
-// --- THIS IS THE FIX ---
-// Export the configured Multer instance directly.
-// Do NOT call .array() or .single() here. This allows the routes to decide how to use it.
+// Initialize the upload middleware with the new local storage configuration
+// --- THE FIX: Now exporting the Multer instance itself, not the .array() function. ---
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
+    limits: { fileSize: 2 * 1024 * 1024 }, // Limit file size to 2MB (2,000,000 bytes)
     fileFilter: function(req, file, cb){
         checkFileType(file, cb);
     }

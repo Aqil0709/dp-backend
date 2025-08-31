@@ -1,41 +1,78 @@
 const express = require('express');
 const router = express.Router();
-
-// Corrected paths to middleware and controllers
-// Assuming middleware is in a sibling directory to 'api'
-const upload = require('../middleware/upload.middleware');
-const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware');
-// Assuming the controller is in the same directory
 const productController = require('./products.controller');
+const authMiddleware = require('../middleware/auth.middleware');
+const multer = require('multer');
+const path = require('path');
+const crypto = require('crypto');
 
-// --- Public Routes ---
-// Get all products
+// --- Configure Multer for file uploads ---
+// The destination folder for uploads
+const uploadDir = path.join(__dirname, '../../public/uploads');
+
+// Configure disk storage
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        // Use a unique name to prevent conflicts
+        crypto.randomBytes(16, (err, hash) => {
+            if (err) return cb(err);
+            const filename = `${hash.toString('hex')}${path.extname(file.originalname)}`;
+            cb(null, filename);
+        });
+    }
+});
+
+// Create the upload middleware instance
+const upload = multer({ storage: storage });
+
+// --- PUBLIC ROUTES ---
 router.get('/', productController.getAllProducts);
-
-// Get product by ID
 router.get('/:productId', productController.getProductById);
-
-
-// --- Authenticated User Routes ---
-// Add/Create a new review for a product
-router.post('/review', authenticate, productController.createProductReview);
 router.get('/:productId/reviews', productController.getProductReviews);
 
-// --- Admin Only Routes (require authentication and admin role) ---
+// --- ADMIN ONLY ROUTES ---
+// FIX: Changed upload.single() to upload.array() and matched the field name
+// The frontend uses the field name 'productImages', so the middleware must match it.
+router.post(
+    '/add',
+    authMiddleware.authenticate,
+    authMiddleware.authorizeAdmin,
+    upload.array('productImages', 4), // FIX: Changed field name and added max count
+    productController.addProduct
+);
 
-// Add a new product
-// The 'upload' middleware now saves the file locally before calling addProduct.
-router.post('/add', authenticate, authorizeAdmin, upload.array('images', 5), productController.addProduct);
+// FIX: Changed upload.single() to upload.array() and matched the field name
+// The frontend uses the field name 'productImages', so the middleware must match it.
+router.put(
+    '/update/:productId',
+    authMiddleware.authenticate,
+    authMiddleware.authorizeAdmin,
+    upload.array('productImages', 4), // FIX: Changed field name and added max count
+    productController.updateProduct
+);
 
-// Update an existing product
-// This route also accepts an optional image upload.
-router.put('/update/:productId', authenticate, authorizeAdmin, upload.array('images', 5), productController.updateProduct);
+router.put(
+    '/status/:productId',
+    authMiddleware.authenticate,
+    authMiddleware.authorizeAdmin,
+    productController.updateProductStatus
+);
 
-// Update a product's status fields (e.g., isSpecial, isTrending)
-// This is a new, dedicated route for simple updates without file uploads.
-router.put('/status/:productId', authenticate, authorizeAdmin, productController.updateProductStatus);
+router.delete(
+    '/delete/:productId',
+    authMiddleware.authenticate,
+    authMiddleware.authorizeAdmin,
+    productController.deleteProduct
+);
 
-// Delete a product
-router.delete('/delete/:productId', authenticate, authorizeAdmin, productController.deleteProduct);
+// --- USER ROUTES (Authenticated) ---
+router.post(
+    '/review',
+    authMiddleware.authenticate,
+    productController.createProductReview
+);
 
 module.exports = router;
