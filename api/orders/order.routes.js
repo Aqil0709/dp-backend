@@ -10,7 +10,7 @@ const {
     cancelOrderController,
     updateOrderStatus,
     returnOrderController, // NEW: Import the new controller function
-    updateOrderStatus 
+    
 } = require('../controllers/order.controller');
 const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware');
 
