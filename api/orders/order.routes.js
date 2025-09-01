@@ -10,6 +10,7 @@ const {
     cancelOrderController,
     updateOrderStatus,
     returnOrderController, // NEW: Import the new controller function
+    updateOrderStatus 
 } = require('../controllers/order.controller');
 const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware');
 
@@ -22,11 +23,17 @@ router.get('/:userId/:orderId', authenticate, getOrderStatus);
 // GET /api/orders - Get all orders (Admin only)
 router.get('/', authenticate, authorizeAdmin, getAllOrders);
 
+// --- CORRECTED ROUTE WITH DIAGNOSTIC LOGGING ---
 // PUT /api/orders/:orderId/status - Update an order's status (Admin only)
 router.put(
     '/:orderId/status', 
     authenticate, 
     authorizeAdmin, 
+    // This new middleware will log a message if the route is successfully matched.
+    (req, res, next) => {
+        console.log('--- ROUTE HANDLER FOR /:orderId/status REACHED ---');
+        next(); // This passes the request to the next function, updateOrderStatus
+    },
     updateOrderStatus
 );
 
