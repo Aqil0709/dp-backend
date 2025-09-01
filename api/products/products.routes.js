@@ -12,7 +12,7 @@ const {
     updateProductStatus
 } = require('./products.controller');
 const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware');
-const upload = require('../middleware/multer.middleware');
+const upload = require('../middleware/upload.middleware');
 
 // Public Routes
 router.get('/', getAllProducts);
