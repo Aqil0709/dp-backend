@@ -3,6 +3,8 @@ const crypto = require("crypto");
 const Order = require("../../models/order.model");
 const User = require("../../models/user.model");
 
+console.log("Razorpay Key ID:", process.env.RAZORPAY_KEY_ID ? "Loaded" : "Missing");
+console.log("Razorpay Key Secret:", process.env.RAZORPAY_KEY_SECRET ? "Loaded" : "Missing");
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
