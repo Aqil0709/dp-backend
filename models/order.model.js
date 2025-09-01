@@ -62,8 +62,13 @@ const orderSchema = new Schema({
     status: {
         type: String,
         required: true,
-        enum: ['Processing', 'Shipped', 'Delivered', 'Cancelled'],
+        // FIX: Added 'Return Requested' to the list of allowed statuses.
+        enum: ['Processing', 'Shipped', 'Delivered', 'Cancelled', 'Return Requested'],
         default: 'Processing',
+    },
+    // FIX: Added a field to store the reason for the return.
+    returnReason: {
+        type: String,
     },
 }, {
     timestamps: true, // `createdAt` will serve as the order date
