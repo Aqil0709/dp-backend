@@ -10,7 +10,7 @@ const {
     createProductReview,
     getProductReviews,
     updateProductStatus
-} = require('../controllers/product.controller');
+} = require('./products.controller');
 const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware');
 const upload = require('../middleware/multer.middleware');
 
