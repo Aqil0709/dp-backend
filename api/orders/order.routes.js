@@ -8,7 +8,8 @@ const {
     getMyOrders,
     createCashOnDeliveryOrder,
     cancelOrderController,
-    updateOrderStatus 
+    updateOrderStatus,
+    returnOrderController // FIX: Import the missing return controller
 } = require('../controllers/order.controller');
 const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware');
 
@@ -43,5 +44,10 @@ router.get('/my-orders', authenticate, getMyOrders);
 
 // PUT /api/orders/:orderId/cancel - Cancel an order (User)
 router.put('/:orderId/cancel', authenticate, cancelOrderController);
+
+// FIX: Add the new route for handling order returns
+// PUT /api/orders/:orderId/return - Request to return an order (User)
+router.put('/:orderId/return', authenticate, returnOrderController);
+
 
 module.exports = router;
