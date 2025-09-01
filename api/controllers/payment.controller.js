@@ -34,6 +34,7 @@ exports.createOrder = async (req, res) => {
 };
 
 // 2. Verify Razorpay Payment & Save Order
+// 2. Verify Razorpay Payment & Save Order
 exports.verifyPayment = async (req, res) => {
   try {
     const { 
@@ -56,13 +57,18 @@ exports.verifyPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid payment signature" });
     }
 
-    // Fetch address snapshot
-    const address = await Address.findById(addressId);
+    // ✅ Fetch address from user's saved addresses
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const address = user.addresses.id(addressId); // mongoose subdocument lookup
     if (!address) {
       return res.status(400).json({ success: false, message: "Address not found" });
     }
 
-    // Map cart items → snapshot for order
+    // ✅ Map cart items → snapshot for order
     const orderItems = cartItems.map(item => ({
       product: item.product._id,
       name: item.product.name,
@@ -71,9 +77,9 @@ exports.verifyPayment = async (req, res) => {
       image: item.product.images?.[0] || "",
     }));
 
-    // Create order document
+    // ✅ Create order document
     const newOrder = new Order({
-      user: req.user._id, // from authenticate middleware
+      user: req.user._id,
       orderItems,
       shippingAddress: {
         name: address.name,
@@ -96,7 +102,8 @@ exports.verifyPayment = async (req, res) => {
 
     res.json({ success: true, order: newOrder });
   } catch (error) {
-    console.error("Error verifying Razorpay payment:", error);
-    res.status(500).json({ success: false, message: "Payment verification failed" });
+    console.error("❌ Error verifying Razorpay payment:", error);
+    res.status(500).json({ success: false, message: "Payment verification failed", error: error.message });
   }
 };
+
