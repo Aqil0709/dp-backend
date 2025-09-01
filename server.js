@@ -24,7 +24,7 @@ const orderRoutes = require('./api/orders/order.routes');
 const stockRoutes = require('./api/stock/stock.routes');
 const userRoutes = require('./api/users/user.routes');
 const adminRoutes = require('./api/admin/admin.routes');
-
+const paymentRoutes = require("./api/routes/payment.routes");
 // Connect to MongoDB Atlas
 connectDB(); 
 
@@ -75,7 +75,7 @@ app.use('/stock', stockRoutes);
 app.use('/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/public', express.static(path.join(__dirname, 'public')));
-
+app.use("/api/payment", paymentRoutes);
 
 // --- REAL-TIME VISITOR STATS LOGIC ---
 let onlineVisitors = 0;
