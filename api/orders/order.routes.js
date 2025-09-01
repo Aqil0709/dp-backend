@@ -1,34 +1,45 @@
 const express = require('express');
 const router = express.Router();
+// Correctly import all required controller functions directly
 const {
-    getAllOrders,
-    createUpiOrder,
-    createCashOnDeliveryOrder,
+    createPendingUpiOrder,
     getOrderStatus,
+    getAllOrders,
     getMyOrders,
+    createCashOnDeliveryOrder,
     cancelOrderController,
     updateOrderStatus,
-    verifyUpiPayment,
+    returnOrderController, // NEW: Import the new controller function
 } = require('../controllers/order.controller');
 const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware');
 
-// Public route for UPI payment verification callback
-router.post('/payment/verify', verifyUpiPayment);
+// POST /api/orders/upi-initiate/:userId - Initiate a pending UPI order
+router.post('/upi-initiate/:userId', authenticate, createPendingUpiOrder);
 
-// Authenticated routes
-router.use(authenticate);
+// GET /api/orders/:userId/:orderId - Get status of an order
+router.get('/:userId/:orderId', authenticate, getOrderStatus);
 
-// Order creation
-router.post('/cod/:userId', createCashOnDeliveryOrder);
-router.post('/upi/:userId', createUpiOrder);
+// GET /api/orders - Get all orders (Admin only)
+router.get('/', authenticate, authorizeAdmin, getAllOrders);
 
-// User-specific orders
-router.get('/myorders', getMyOrders);
-router.get('/:orderId/status', getOrderStatus);
-router.post('/:orderId/cancel', cancelOrderController);
+// PUT /api/orders/:orderId/status - Update an order's status (Admin only)
+router.put(
+    '/:orderId/status', 
+    authenticate, 
+    authorizeAdmin, 
+    updateOrderStatus
+);
 
-// Admin-only route for updating order status (you'll need a separate admin middleware for this)
-router.put('/:orderId/status', updateOrderStatus);
-router.get('/', getAllOrders);
+// POST /api/orders/user/:userId/orders/cod - Create a Cash on Delivery order
+router.post('/user/:userId/orders/cod', authenticate, createCashOnDeliveryOrder);
+
+// GET /api/orders/my-orders - Get orders for the authenticated user
+router.get('/my-orders', authenticate, getMyOrders);
+
+// PUT /api/orders/:orderId/cancel - Cancel an order (User)
+router.put('/:orderId/cancel', authenticate, cancelOrderController);
+
+// NEW: PUT /api/orders/:orderId/return - Request to return an order
+router.put('/:orderId/return', authenticate, returnOrderController);
 
 module.exports = router;

@@ -3,6 +3,7 @@
     "axios": "^1.11.0",
     "bcryptjs": "^3.0.2",
     "cloudinary": "^1.41.3",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
     "express": "^5.1.0",
