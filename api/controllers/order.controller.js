@@ -1,5 +1,3 @@
-// backend/api/orders/order.controller.js
-
 const mongoose = require('mongoose');
 const Order = require('../../models/order.model');
 const User = require('../../models/user.model');
@@ -233,5 +231,4 @@ module.exports = {
     cancelOrderController,
     updateOrderStatus,
     returnOrderController,
-    
 };
