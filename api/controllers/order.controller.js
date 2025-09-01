@@ -233,5 +233,5 @@ module.exports = {
     cancelOrderController,
     updateOrderStatus,
     returnOrderController,
-    updateOrderStatus
+    
 };
