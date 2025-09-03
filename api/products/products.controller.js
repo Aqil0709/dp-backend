@@ -2,7 +2,16 @@
 const Product = require('../../models/product.model');
 const Review = require('../../models/review.model');
 const { Types } = require('mongoose');
-const cloudinary = require('../../config/cloudinary'); // ✅ tumne banaya hua hoga
+const cloudinary = require('../../config/cloudinary');
+const fs = require('fs');
+
+// --- Helper: Delete local temp files ---
+const deleteLocalFile = (filePath) => {
+  if (!filePath) return;
+  fs.unlink(filePath, (err) => {
+    if (err) console.error("Error deleting temp file:", err);
+  });
+};
 
 // --- PUBLIC ---
 const getAllProducts = async (req, res) => {
@@ -18,9 +27,7 @@ const getAllProducts = async (req, res) => {
 const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.productId);
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found.' });
-    }
+    if (!product) return res.status(404).json({ message: 'Product not found.' });
     res.status(200).json(product);
   } catch (error) {
     console.error('Get product by ID error:', error);
@@ -48,11 +55,13 @@ const addProduct = async (req, res) => {
       return res.status(400).json({ message: 'Price must be positive and quantity non-negative.' });
     }
 
-    // ✅ Cloudinary uploaded images ka array
-    const imageObjects = req.files.map(file => ({
-      url: file.path,           // Cloudinary URL
-      public_id: file.filename, // Cloudinary public_id
-    }));
+    // ✅ Upload images to Cloudinary
+    const imageObjects = [];
+    for (const file of req.files) {
+      const result = await cloudinary.uploader.upload(file.path, { folder: 'products' });
+      deleteLocalFile(file.path);
+      imageObjects.push({ url: result.secure_url, public_id: result.public_id });
+    }
 
     const newProduct = await Product.create({
       name,
@@ -82,14 +91,9 @@ const updateProduct = async (req, res) => {
 
   try {
     const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found.' });
-    }
+    if (!product) return res.status(404).json({ message: 'Product not found.' });
 
-    const {
-      name, category, description, price, originalPrice, quantity,
-      isSpecial, isTrending, currentImageUrlsToRetain
-    } = req.body;
+    const { name, category, description, price, originalPrice, quantity, isSpecial, isTrending, currentImageUrlsToRetain } = req.body;
 
     const updateFields = {};
     if (name) updateFields.name = name;
@@ -104,20 +108,17 @@ const updateProduct = async (req, res) => {
     let newImages = [];
 
     if (req.files && req.files.length > 0) {
-      // ✅ New uploads
-      newImages = req.files.map(file => ({
-        url: file.path,
-        public_id: file.filename,
-      }));
-
-      // Purane images delete kar do (Cloudinary se bhi)
+      // ✅ Upload new images
+      for (const file of req.files) {
+        const result = await cloudinary.uploader.upload(file.path, { folder: 'products' });
+        deleteLocalFile(file.path);
+        newImages.push({ url: result.secure_url, public_id: result.public_id });
+      }
+      // ✅ Delete old images from Cloudinary
       for (const img of product.images) {
-        if (img.public_id) {
-          await cloudinary.uploader.destroy(img.public_id);
-        }
+        if (img.public_id) await cloudinary.uploader.destroy(img.public_id);
       }
     } else if (currentImageUrlsToRetain) {
-      // ✅ Retain some old images
       const retainedUrls = JSON.parse(currentImageUrlsToRetain);
       newImages = product.images.filter(img => retainedUrls.includes(img.url));
     } else {
@@ -130,11 +131,7 @@ const updateProduct = async (req, res) => {
 
     updateFields.images = newImages;
 
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { $set: updateFields },
-      { new: true, runValidators: true }
-    );
+    const updatedProduct = await Product.findByIdAndUpdate(productId, { $set: updateFields }, { new: true, runValidators: true });
 
     res.status(200).json(updatedProduct);
   } catch (error) {
@@ -147,15 +144,11 @@ const deleteProduct = async (req, res) => {
   const { productId } = req.params;
   try {
     const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found.' });
-    }
+    if (!product) return res.status(404).json({ message: 'Product not found.' });
 
-    // ✅ Cloudinary se images delete
+    // ✅ Delete images from Cloudinary
     for (const img of product.images) {
-      if (img.public_id) {
-        await cloudinary.uploader.destroy(img.public_id);
-      }
+      if (img.public_id) await cloudinary.uploader.destroy(img.public_id);
     }
 
     await Product.findByIdAndDelete(productId);
@@ -177,15 +170,9 @@ const updateProductStock = async (req, res) => {
 
   try {
     const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found.' });
-    }
+    if (!product) return res.status(404).json({ message: 'Product not found.' });
 
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { $inc: { quantity: Number(quantityChange) } },
-      { new: true, runValidators: true }
-    );
+    const updatedProduct = await Product.findByIdAndUpdate(productId, { $inc: { quantity: Number(quantityChange) } }, { new: true, runValidators: true });
 
     if (updatedProduct.quantity < 0) {
       await Product.findByIdAndUpdate(productId, { $inc: { quantity: -Number(quantityChange) } });
@@ -203,20 +190,15 @@ const updateProductStock = async (req, res) => {
 const createProductReview = async (req, res) => {
   const { rating, comment, productId } = req.body;
 
-  if (!req.user || !req.user._id) {
-    return res.status(401).json({ message: 'Authentication error, user not found.' });
-  }
+  if (!req.user || !req.user._id) return res.status(401).json({ message: 'Authentication error, user not found.' });
   const userId = req.user._id;
 
   try {
     const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: "Product not found." });
-    }
+    if (!product) return res.status(404).json({ message: "Product not found." });
+
     const alreadyReviewed = await Review.findOne({ product: productId, user: userId });
-    if (alreadyReviewed) {
-      return res.status(400).json({ message: 'You have already submitted a review.' });
-    }
+    if (alreadyReviewed) return res.status(400).json({ message: 'You have already submitted a review.' });
 
     const review = await Review.create({ rating, comment, product: productId, user: userId });
 
@@ -257,15 +239,9 @@ const updateProductStatus = async (req, res) => {
     if (isSpecial !== undefined) updatedFields.isSpecial = isSpecial;
     if (isTrending !== undefined) updatedFields.isTrending = isTrending;
 
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { $set: updatedFields },
-      { new: true, runValidators: true }
-    );
+    const updatedProduct = await Product.findByIdAndUpdate(productId, { $set: updatedFields }, { new: true, runValidators: true });
+    if (!updatedProduct) return res.status(404).json({ message: 'Product not found.' });
 
-    if (!updatedProduct) {
-      return res.status(404).json({ message: 'Product not found.' });
-    }
     res.status(200).json({ message: 'Product status updated successfully.', product: updatedProduct });
   } catch (error) {
     console.error('Error updating product status:', error);

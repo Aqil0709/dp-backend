@@ -4,7 +4,7 @@ const productSchema = new mongoose.Schema({
     name: {
         type: String,
         required: [true, 'Product name is required'],
-        trim: true, // Removes whitespace from both ends
+        trim: true,
     },
     category: {
         type: String,
@@ -25,12 +25,25 @@ const productSchema = new mongoose.Schema({
         required: [true, 'Product description is required'],
     },
     images: {
-        type: [String], // An array of image URLs
-        required: true,
-        validate: [
-            (arr) => arr.length > 0,
-            'At least one product image is required.',
+        type: [
+            {
+                url: {
+                    type: String,
+                    required: [true, 'Image URL is required'],
+                },
+                public_id: {
+                    type: String,
+                    required: [true, 'Cloudinary public_id is required'],
+                },
+            },
         ],
+        required: [true, 'At least one product image is required.'],
+        validate: {
+            validator: function(arr) {
+                return arr.length > 0;
+            },
+            message: 'At least one product image is required.',
+        },
     },
     quantity: {
         type: Number,
@@ -38,17 +51,16 @@ const productSchema = new mongoose.Schema({
         min: [0, 'Quantity cannot be negative'],
         default: 0,
     },
-    // --- NEW: Added fields for special/trending products ---
     isSpecial: {
         type: Boolean,
-        default: false, // Products are not special by default
+        default: false,
     },
     isTrending: {
         type: Boolean,
-        default: false, // Products are not trending by default
+        default: false,
     },
 }, {
-    timestamps: true, // Automatically adds `createdAt` and `updatedAt` fields
+    timestamps: true,
 });
 
 const Product = mongoose.model('Product', productSchema);
