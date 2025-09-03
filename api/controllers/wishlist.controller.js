@@ -1,4 +1,4 @@
-const Wishlist = require('../models/wishlist.model');
+const Wishlist = require('../../models/wishlist.model');
 
 exports.addToWishlist = async (req, res) => {
   try {
