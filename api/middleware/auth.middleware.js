@@ -1,7 +1,6 @@
-// backend/api/middleware/auth.middleware.js
-const jwt = require('jsonwebtoken'); // Assuming you're using JWTs
+const jwt = require('jsonwebtoken');
 
-console.log('--- Loading auth.middleware.js ---'); // Debugging log
+console.log('--- Loading auth.middleware.js ---');
 
 // Middleware to authenticate any user (verify token and attach user data)
 const authenticate = (req, res, next) => {
@@ -20,21 +19,20 @@ const authenticate = (req, res, next) => {
         }
 
         // Verify the token
-        const decodedToken = jwt.verify(token, process.env.JWT_SECRET); // Use your secret key from .env
+        const decodedToken = jwt.verify(token, process.env.JWT_SECRET); 
         console.log("Auth Middleware: Token decoded successfully. Decoded Payload:", decodedToken);
 
-        // Attach user data (userId and role) to the request object
-        // IMPORTANT: The controller now needs to use req.userData.userId instead of req.user._id
-        req.user = { _id: decodedToken.userId, role: decodedToken.role }; 
+        // Attach user data (_id and role) to the request object
+        req.user = { _id: decodedToken.id, role: decodedToken.role }; // Assuming payload has 'id'
         console.log("Auth Middleware: req.user set to:", req.user);
 
         next(); // Proceed to the next middleware or route handler
     } catch (error) {
-        console.error("Auth Middleware: Authentication error:", error.message); // More specific error log
-        if (error.name === 'JsonWebTokenError') {
-            return res.status(401).json({ message: 'Invalid token.' });
+        console.error("Auth Middleware: Authentication error:", error.message); 
+        if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: 'Invalid or expired token.' });
         }
-        return res.status(401).json({ message: 'Authentication failed.' });
+        return res.status(500).json({ message: 'Authentication failed due to a server error.' });
     }
 };
 
@@ -48,7 +46,6 @@ const authorizeAdmin = (req, res, next) => {
     next(); // User is an admin, proceed
 };
 
-// Export both functions as properties of an object
 module.exports = { authenticate, authorizeAdmin };
 
-console.log('--- auth.middleware.js loaded successfully ---'); // Debugging log
+console.log('--- auth.middleware.js loaded successfully ---');
