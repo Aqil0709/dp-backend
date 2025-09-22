@@ -59,10 +59,10 @@ const downloadInvoiceController = async (req, res) => {
         doc.moveDown();
 
         // Company & Customer Details
-        doc.fontSize(12).font('Helvetica-Bold').text('ShopKart Inc.', { continued: true });
+        doc.fontSize(12).font('Helvetica-Bold').text('Aaisaheb Vastram ', { continued: true });
         doc.font('Helvetica').text('                                                                                ', { continued: true });
         doc.font('Helvetica-Bold').text(`Bill To: ${order.shippingAddress.name}`);
-        doc.font('Helvetica').text('123 Tech Lane, Gadget City, 110011', { continued: true });
+        doc.font('Helvetica').text('DP7 SPORTS COMPLEX,GANDHI STATUE" WEAR,NEAR RECREATION HALL DEVARATNA CHALKARANJI.', { continued: true });
         doc.text(`                                                                 ${formatAddress(order.shippingAddress)}`);
         
         doc.moveDown(2);
