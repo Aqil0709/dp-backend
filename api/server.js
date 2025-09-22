@@ -21,6 +21,10 @@ const adminRoutes = require('./api/admin/admin.routes');
 const paymentRoutes = require("./api/routes/payment.routes");
 // --- FIX: Corrected the path to the wishlist routes file for consistency ---
 const wishlistRoutes = require('./api/routes/wishlist.routes'); 
+const invoiceRoutes = require("./api//routes/invoice.routes");
+
+
+
 
 // Connect to MongoDB Atlas
 connectDB();
@@ -70,7 +74,7 @@ app.use('/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/public', express.static(path.join(__dirname, 'public')));
 app.use("/api/payment", paymentRoutes);
-
+app.use("/api/orders", invoiceRoutes);
 // --- Use the wishlist routes with the correct prefix ---
 app.use('/api/wishlist', wishlistRoutes);
 
