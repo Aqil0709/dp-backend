@@ -1,5 +1,3 @@
-// backend/models/order.model.js
-
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
@@ -48,7 +46,8 @@ const orderSchema = new Schema({
     paymentMethod: {
         type: String,
         required: true,
-        enum: ['UPI', 'COD'],
+        // FIX: Added 'Razorpay' to the list of allowed payment methods.
+        enum: ['UPI', 'COD', 'Razorpay'],
     },
 
     paymentStatus: {
@@ -56,17 +55,15 @@ const orderSchema = new Schema({
         required: true,
         default: 'Pending',
     },
-    transactionRef: { // For UPI payments
+    transactionRef: { // For UPI or Razorpay payments
         type: String,
     },
     status: {
         type: String,
         required: true,
-        // FIX: Added 'Return Requested' to the list of allowed statuses.
         enum: ['Processing', 'Shipped', 'Delivered', 'Cancelled', 'Return Requested'],
         default: 'Processing',
     },
-    // FIX: Added a field to store the reason for the return.
     returnReason: {
         type: String,
     },
