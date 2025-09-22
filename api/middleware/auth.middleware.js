@@ -22,8 +22,9 @@ const authenticate = (req, res, next) => {
         const decodedToken = jwt.verify(token, process.env.JWT_SECRET); 
         console.log("Auth Middleware: Token decoded successfully. Decoded Payload:", decodedToken);
 
-        // Attach user data (_id and role) to the request object
-        req.user = { _id: decodedToken.id, role: decodedToken.role }; // Assuming payload has 'id'
+        // --- FIX ---
+        // The decoded token payload uses 'userId', not 'id'. This line is now corrected.
+        req.user = { _id: decodedToken.userId, role: decodedToken.role }; 
         console.log("Auth Middleware: req.user set to:", req.user);
 
         next(); // Proceed to the next middleware or route handler
