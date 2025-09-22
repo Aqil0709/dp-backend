@@ -4,8 +4,11 @@ const Order = require("../../models/order.model");
 const User = require("../../models/user.model");
 
 // --- Environment Variable Check ---
+// This check is crucial. If the keys are missing, we stop the server immediately
+// to prevent it from crashing when trying to initialize Razorpay.
 if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-  console.error("FATAL ERROR: Razorpay Key ID or Key Secret is not defined.");
+  console.error("FATAL ERROR: Razorpay Key ID or Key Secret is not defined in your .env file.");
+  process.exit(1); // Exit the application
 }
 
 const razorpay = new Razorpay({
@@ -18,14 +21,14 @@ exports.createOrder = async (req, res) => {
   try {
     const { amount } = req.body;
 
-    if (!amount || typeof amount !== 'number') {
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
         return res.status(400).json({ success: false, message: "Invalid amount provided." });
     }
 
     const options = {
       amount: amount * 100, // convert to paise
       currency: "INR",
-      receipt: "receipt_" + Date.now(),
+      receipt: "receipt_" + crypto.randomBytes(10).toString('hex'), // A more unique receipt
     };
 
     const order = await razorpay.orders.create(options);
@@ -33,8 +36,7 @@ exports.createOrder = async (req, res) => {
     res.json({
       success: true,
       order,
-      key: process.env.RAZORPAY_KEY_ID,
-      amount: options.amount,
+      key: process.env.RAZORPAY_KEY_ID
     });
   } catch (error) {
     console.error("Error creating Razorpay order:", error);
@@ -43,7 +45,7 @@ exports.createOrder = async (req, res) => {
 };
 
 
-// 2. Verify Razorpay Payment & Save Order (REVISED AND COMPLETED)
+// 2. Verify Razorpay Payment & Save Order
 exports.verifyPayment = async (req, res) => {
   console.log("Starting payment verification...");
   
@@ -76,10 +78,9 @@ exports.verifyPayment = async (req, res) => {
     console.log("✅ Signature verified successfully.");
 
     // --- Authentication and Data Integrity Checks ---
-    // This check is critical. It relies on middleware to add 'req.user'.
     if (!req.user || !req.user._id) {
-        console.error("Authentication error: req.user is not defined. Middleware might be missing.");
-        return res.status(401).json({ success: false, message: "User not authenticated." });
+      console.error("Authentication error: req.user is not defined. Ensure auth middleware is used on this route.");
+      return res.status(401).json({ success: false, message: "User not authenticated." });
     }
 
     const user = await User.findById(req.user._id);
@@ -102,9 +103,9 @@ exports.verifyPayment = async (req, res) => {
 
     // --- Create Order Document ---
     const orderItems = cartItems.map(item => {
-        // Add a check to ensure product object exists
         if (!item.product || !item.product._id) {
-            throw new Error('Cart item is missing product details.');
+            // This error should be caught properly to avoid crashing the server
+            throw new Error(`Cart item is missing product details. Item: ${JSON.stringify(item)}`);
         }
         return {
             product: item.product._id,
@@ -130,7 +131,7 @@ exports.verifyPayment = async (req, res) => {
         address_type: address.address_type,
       },
       totalAmount,
-      paymentMethod: "UPI", // Or determine dynamically
+      paymentMethod: "Razorpay", // Be more specific
       paymentStatus: "Paid",
       transactionRef: razorpay_payment_id,
       status: "Processing",
@@ -139,12 +140,16 @@ exports.verifyPayment = async (req, res) => {
     await newOrder.save();
     console.log("✅ New order saved to database with ID:", newOrder._id);
 
-    // TODO: Clear the user's cart after successful order.
+    // --- Clear the user's cart after successful order ---
+    user.cart = [];
+    await user.save({ validateBeforeSave: false }); // Avoids potential validation issues on other fields
+    console.log(`✅ Cleared cart for user: ${user.email}`);
 
-    res.json({ success: true, order: newOrder, message: "Payment successful and order placed." });
+    res.json({ success: true, orderId: newOrder._id, message: "Payment successful and order placed." });
 
   } catch (error) {
     console.error("❌ Error during payment verification:", error);
     res.status(500).json({ success: false, message: "Payment verification failed", error: error.message });
   }
 };
+
