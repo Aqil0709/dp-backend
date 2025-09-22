@@ -64,7 +64,7 @@ app.use('/auth', authRoutes);
 app.use('/cart', cartRoutes);
 app.use('/profile', profileRoutes);
 app.use('/products', productRoutes);
-app.use('/api/orders', orderRoutes);
+app.use('/orders', orderRoutes);
 app.use('/stock', stockRoutes);
 app.use('/users', userRoutes);
 app.use('/api/admin', adminRoutes);
