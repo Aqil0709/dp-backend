@@ -35,7 +35,8 @@ const getOrderStatus = async (req, res) => {
         if (!order) {
             return res.status(404).json({ message: 'Order not found.' });
         }
-        res.status(200).json(order);
+        // FIX: Ensure response matches what the frontend expects (data.order)
+        res.status(200).json({ order });
     } catch (error) {
         console.error('Error fetching order status:', error);
         res.status(500).json({ message: 'Server error while fetching order status.' });
@@ -232,3 +233,4 @@ module.exports = {
     updateOrderStatus,
     returnOrderController,
 };
+
