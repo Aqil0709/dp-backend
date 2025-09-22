@@ -90,7 +90,6 @@ const generateInvoicePdf = (doc, order) => {
     doc.font('Helvetica-Bold').text('State Name: ', { continued: true, width: halfWidth }).font('Helvetica').text('Maharashtra, Code: 27');
     doc.font('Helvetica-Bold').text('E-Mail: ', { continued: true, width: halfWidth }).font('Helvetica').text('aaisahebvastram@gmail.com');
     const leftHeight = doc.y;
-    doc.y = topSectionY;
     
     // Right side invoice details
     const rightColX = pageMargin + halfWidth;
@@ -100,7 +99,7 @@ const generateInvoicePdf = (doc, order) => {
 
     const addDetail = (label, value) => {
         doc.font('Helvetica-Bold').text(label, rightColX, detailsY, { width: labelWidth, align: 'left' });
-        doc.font('Helvetica').text(value, rightColX + labelWidth, detailsY, { width: valueWidth, align: 'left' });
+        doc.font('Helvetica').text(value || '', rightColX + labelWidth, detailsY, { width: valueWidth, align: 'left' });
         detailsY += 12;
     }
 
@@ -124,60 +123,79 @@ const generateInvoicePdf = (doc, order) => {
 
     // --- Buyer and Consignee Details ---
     const addressY = doc.y;
+    // Draw left column (Consignee)
     doc.font('Helvetica-Bold').text('Consignee (Ship to):', pageMargin, addressY, { width: halfWidth });
     doc.font('Helvetica').text(order.shippingAddress.name, { width: halfWidth });
     doc.text(`${order.shippingAddress.address}, ${order.shippingAddress.locality}`, { width: halfWidth });
     doc.text(`${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.pincode}`, { width: halfWidth });
     doc.font('Helvetica-Bold').text('State Name: ', { continued: true }).font('Helvetica').text(`${order.shippingAddress.state}, Code: 27`);
     doc.font('Helvetica-Bold').text('Contact: ', { continued: true }).font('Helvetica').text(order.shippingAddress.mobile);
+    const leftAddressHeight = doc.y;
 
+    // Reset y to start of address section and draw right column (Buyer)
+    doc.y = addressY;
     doc.font('Helvetica-Bold').text('Buyer (Bill to):', rightColX, addressY, { width: halfWidth });
-    doc.font('Helvetica').text(order.shippingAddress.name, rightColX, doc.y - 36, { width: halfWidth }); // Adjust Y
-    doc.text(`${order.shippingAddress.address}, ${order.shippingAddress.locality}`, rightColX, doc.y, { width: halfWidth });
-    doc.text(`${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.pincode}`, rightColX, doc.y, { width: halfWidth });
-    doc.font('Helvetica-Bold').text('State Name: ', rightColX, doc.y, { continued: true, width: halfWidth }).font('Helvetica').text(`${order.shippingAddress.state}, Code: 27`);
-    doc.font('Helvetica-Bold').text('Contact: ', rightColX, doc.y, { continued: true, width: halfWidth }).font('Helvetica').text(order.shippingAddress.mobile);
-    
-    doc.moveDown(2);
+    doc.font('Helvetica').text(order.shippingAddress.name, { width: halfWidth });
+    doc.text(`${order.shippingAddress.address}, ${order.shippingAddress.locality}`, { width: halfWidth });
+    doc.text(`${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.pincode}`, { width: halfWidth });
+    doc.font('Helvetica-Bold').text('State Name: ', { continued: true }).font('Helvetica').text(`${order.shippingAddress.state}, Code: 27`);
+    doc.font('Helvetica-Bold').text('Contact: ', { continued: true }).font('Helvetica').text(order.shippingAddress.mobile);
+    const rightAddressHeight = doc.y;
+
+    // Set y to the bottom of the taller of the two columns
+    doc.y = Math.max(leftAddressHeight, rightAddressHeight) + 10;
+
     doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(pageMargin, doc.y).lineTo(doc.page.width - pageMargin, doc.y).stroke();
     doc.moveDown(0.5);
 
     // --- Items Table ---
-    const tableTop = doc.y;
-    const itemCols = { no: 50, desc: 100, hsn: 240, qty: 310, rate: 360, per: 430, amt: 480 };
-    doc.font('Helvetica-Bold');
-    doc.text('Sl No.', itemCols.no, tableTop);
-    doc.text('Description of Goods', itemCols.desc, tableTop);
-    doc.text('HSN/SAC', itemCols.hsn, tableTop, { align: 'center'});
-    doc.text('Quantity', itemCols.qty, tableTop, { align: 'center'});
-    doc.text('Rate', itemCols.rate, tableTop, { align: 'right'});
-    doc.text('per', itemCols.per, tableTop, { align: 'center'});
-    doc.text('Amount', 0, tableTop, { align: 'right', width: contentWidth + 10 });
-    doc.moveDown(1);
-    const tableHeaderY = doc.y;
-    doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(pageMargin, tableTop - 5).lineTo(doc.page.width - pageMargin, tableTop - 5).stroke(); // Top border
-    doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(pageMargin, tableHeaderY).lineTo(doc.page.width - pageMargin, tableHeaderY).stroke(); // Bottom border of header
+    const tableTop = doc.y + 10;
+    const tableHeaders = {
+        no: { x: pageMargin, width: 40, align: 'center' },
+        desc: { x: pageMargin + 40, width: 180, align: 'left' },
+        hsn: { x: pageMargin + 220, width: 70, align: 'center' },
+        qty: { x: pageMargin + 290, width: 60, align: 'center' },
+        rate: { x: pageMargin + 350, width: 60, align: 'right' },
+        per: { x: pageMargin + 410, width: 40, align: 'center' },
+        amt: { x: pageMargin + 450, width: contentWidth - 450, align: 'right' }
+    };
+    
+    const drawTableRow = (y, items, isHeader = false) => {
+        if (isHeader) doc.font('Helvetica-Bold');
+        else doc.font('Helvetica');
 
-    let y = tableHeaderY;
-    doc.font('Helvetica');
+        doc.text(items.no, tableHeaders.no.x, y, { width: tableHeaders.no.width, align: tableHeaders.no.align });
+        doc.text(items.desc, tableHeaders.desc.x, y, { width: tableHeaders.desc.width, align: tableHeaders.desc.align });
+        doc.text(items.hsn, tableHeaders.hsn.x, y, { width: tableHeaders.hsn.width, align: tableHeaders.hsn.align });
+        doc.text(items.qty, tableHeaders.qty.x, y, { width: tableHeaders.qty.width, align: tableHeaders.qty.align });
+        doc.text(items.rate, tableHeaders.rate.x, y, { width: tableHeaders.rate.width, align: tableHeaders.rate.align });
+        doc.text(items.per, tableHeaders.per.x, y, { width: tableHeaders.per.width, align: tableHeaders.per.align });
+        doc.text(items.amt, tableHeaders.amt.x, y, { width: tableHeaders.amt.width, align: tableHeaders.amt.align });
+    };
+
+    doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(pageMargin, tableTop - 5).lineTo(doc.page.width - pageMargin, tableTop - 5).stroke();
+    let y = tableTop;
+    drawTableRow(y, { no: 'Sl No.', desc: 'Description of Goods', hsn: 'HSN/SAC', qty: 'Quantity', rate: 'Rate', per: 'per', amt: 'Amount' }, true);
+    y += 20;
+    doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(pageMargin, y).lineTo(doc.page.width - pageMargin, y).stroke();
+    y += 5;
+
     order.orderItems.forEach((item, index) => {
-        y += 15;
-        doc.text(index + 1, itemCols.no, y, {width: 50, align: 'center'});
-        doc.text(item.name, itemCols.desc, y, {width: 130});
-        doc.text('108580', itemCols.hsn, y, {width: 60, align: 'center'});
-        doc.text(`${item.quantity} PCS`, itemCols.qty, y, {width: 60, align: 'center'});
-        doc.text(`₹${item.price.toFixed(2)}`, itemCols.rate, y, {width: 60, align: 'right'});
-        doc.text('PCS', itemCols.per, y, {width: 50, align: 'center'});
-        doc.text(`₹${(item.quantity * item.price).toFixed(2)}`, 0, y, {width: contentWidth+10, align: 'right' });
+        const itemHeight = Math.max(15, doc.heightOfString(item.name, { width: tableHeaders.desc.width }));
+        drawTableRow(y, {
+            no: index + 1, desc: item.name, hsn: '108580', qty: `${item.quantity} PCS`, rate: `₹${item.price.toFixed(2)}`, per: 'PCS', amt: `₹${(item.quantity * item.price).toFixed(2)}`
+        });
+        y += itemHeight + 5;
     });
     
-    y += 20;
-    doc.text('Less:', itemCols.no, y);
+    doc.y = y > doc.y ? y : doc.y;
+    y = doc.y + 10;
+    doc.text('Less:', tableHeaders.no.x, y);
 
     const addTotalLine = (label, value) => {
         y += 15;
-        doc.text(label, itemCols.per, y, {width: 50, align: 'right'});
-        doc.text(value, 0, y, {width: contentWidth + 10, align: 'right'});
+        doc.text(label, tableHeaders.rate.x, y, { width: tableHeaders.rate.width + tableHeaders.per.width - 10, align: 'right'});
+        doc.text(value, tableHeaders.amt.x, y, { width: tableHeaders.amt.width, align: 'right'});
     }
     
     addTotalLine('S GST', `₹${sgst.toFixed(2)}`);
@@ -188,21 +206,23 @@ const generateInvoicePdf = (doc, order) => {
     doc.strokeColor('#aaaaaa').lineWidth(2).moveTo(pageMargin, y).lineTo(doc.page.width - pageMargin, y).stroke();
     y += 5;
     doc.font('Helvetica-Bold');
-    doc.text('Total', itemCols.hsn, y, { align: 'right', width: 220});
-    doc.text(`${order.orderItems.reduce((acc, item) => acc + item.quantity, 0)} PCS`, itemCols.qty, y, {width: 60, align: 'center'});
-    doc.fontSize(12).text(`₹${grandTotal.toFixed(2)}`, 0, y, {width: contentWidth + 10, align: 'right'});
+    doc.text('Total', tableHeaders.hsn.x, y, { width: tableHeaders.hsn.width + tableHeaders.qty.width - 70, align: 'right'});
+    doc.text(`${order.orderItems.reduce((acc, item) => acc + item.quantity, 0)} PCS`, tableHeaders.qty.x, y, {width: tableHeaders.qty.width, align: 'center'});
+    doc.fontSize(12).text(`₹${grandTotal.toFixed(2)}`, tableHeaders.amt.x, y, { width: tableHeaders.amt.width, align: 'right'});
     y += 20;
     doc.strokeColor('#aaaaaa').lineWidth(2).moveTo(pageMargin, y).lineTo(doc.page.width - pageMargin, y).stroke();
     y += 5;
+    doc.y = y;
 
     // --- Amount in Words ---
-    doc.fontSize(9).font('Helvetica').text(`Amount Chargeable (in words): ${amountToWords(grandTotal)}`);
-    y = doc.y + 10;
+    doc.fontSize(9).font('Helvetica').text(`Amount Chargeable (in words): ${amountToWords(grandTotal)}`, { width: contentWidth });
+    doc.moveDown(1);
+    y = doc.y;
     doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(pageMargin, y).lineTo(doc.page.width - pageMargin, y).stroke();
     y += 10;
+    doc.y = y;
 
     // --- Tax Summary Table ---
-    // This is a simplified version due to pdfkit's limitations with complex tables.
     doc.fontSize(8).font('Helvetica-Bold').text('HSN/SAC', 50, y);
     doc.text('Taxable Value', 120, y);
     doc.text('CGST', 240, y);
@@ -219,11 +239,12 @@ const generateInvoicePdf = (doc, order) => {
     doc.text(`2.50% | ₹${sgst.toFixed(2)}`, 360, y);
     doc.text(`₹${totalTaxAmount.toFixed(2)}`, 480, y, {align: 'right'});
     y = doc.y + 10;
+    doc.y = y;
 
     // --- Tax in Words ---
     doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(pageMargin, y).lineTo(doc.page.width - pageMargin, y).stroke();
     y += 5;
-    doc.fontSize(9).text(`Tax Amount (in words): ${amountToWords(totalTaxAmount)}`);
+    doc.fontSize(9).text(`Tax Amount (in words): ${amountToWords(totalTaxAmount)}`, { width: contentWidth });
     y = doc.y + 20;
 
 
@@ -415,3 +436,4 @@ module.exports = {
     returnOrderController,
     downloadInvoiceController,
 };
+
