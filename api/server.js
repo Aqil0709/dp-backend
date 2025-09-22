@@ -21,7 +21,7 @@ const adminRoutes = require('./api/admin/admin.routes');
 const paymentRoutes = require("./api/routes/payment.routes");
 // --- FIX: Corrected the path to the wishlist routes file for consistency ---
 const wishlistRoutes = require('./api/routes/wishlist.routes'); 
-const invoiceRoutes = require("./api//routes/invoice.routes");
+const invoiceRoutes = require("./api/routes/invoice.routes");
 
 
 
