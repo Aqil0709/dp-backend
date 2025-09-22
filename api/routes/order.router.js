@@ -1,5 +1,3 @@
-// backend/routes/order.routes.js
-
 const express = require("express");
 const router = express.Router();
 const PDFDocument = require("pdfkit");
@@ -38,23 +36,24 @@ router.get("/", getAllOrders);
 // --- Invoice download route ---
 router.get("/:orderId/invoice", async (req, res) => {
     try {
-        const orderId = req.params.orderId;
-        const order = await Order.findById(orderId)
-            .populate("user", "name email");
+        const { orderId } = req.params;
+        const order = await Order.findById(orderId).populate("user", "name email");
 
         if (!order) return res.status(404).json({ message: "Order not found" });
+
+        // Security: only owner or admin can download
+        if (!req.user.isAdmin && order.user._id.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: "You are not authorized to access this invoice" });
+        }
+
         if (order.status !== "Delivered") {
             return res.status(400).json({ message: "Invoice is available only after delivery" });
         }
 
-        // Create PDF
+        // Generate PDF
         const doc = new PDFDocument({ margin: 50 });
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader(
-            "Content-Disposition",
-            `attachment; filename=invoice_${orderId}.pdf`
-        );
-
+        res.setHeader("Content-Disposition", `attachment; filename=invoice_${orderId}.pdf`);
         doc.pipe(res);
 
         // --- Header ---
@@ -73,9 +72,7 @@ router.get("/:orderId/invoice", async (req, res) => {
         doc.fontSize(12).text("Items:", { underline: true });
         doc.moveDown(0.5);
         order.orderItems.forEach((item, idx) => {
-            doc.text(
-                `${idx + 1}. ${item.name} - Qty: ${item.quantity} x ₹${item.price} = ₹${item.quantity * item.price}`
-            );
+            doc.text(`${idx + 1}. ${item.name} - Qty: ${item.quantity} x ₹${item.price} = ₹${item.quantity * item.price}`);
         });
 
         // --- Total ---
