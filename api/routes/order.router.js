@@ -1,93 +1,56 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const PDFDocument = require("pdfkit");
-const Order = require("../models/order.model");
-const { authenticate } = require("../middleware/auth.middleware");
+// Correctly import all required controller functions directly
 const {
-    getAllOrders,
-    createUpiOrder,
-    createCashOnDeliveryOrder,
+    createPendingUpiOrder,
     getOrderStatus,
+    getAllOrders,
     getMyOrders,
+    createCashOnDeliveryOrder,
     cancelOrderController,
     updateOrderStatus,
-    verifyUpiPayment,
-} = require("../controllers/order.controller");
+    returnOrderController,
+    downloadInvoiceController // NEW: Import the invoice controller
+} = require('../controllers/order.controller');
+const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware');
 
-// --- Public route for UPI payment verification ---
-router.post("/payment/verify", verifyUpiPayment);
+// POST /api/orders/upi-initiate/:userId - Initiate a pending UPI order
+router.post('/upi-initiate/:userId', authenticate, createPendingUpiOrder);
 
-// --- Authenticated routes ---
-router.use(authenticate);
+// GET /api/orders/my-orders - Get orders for the authenticated user
+router.get('/my-orders', authenticate, getMyOrders);
 
-// --- Order creation ---
-router.post("/cod/:userId", createCashOnDeliveryOrder);
-router.post("/upi/:userId", createUpiOrder);
+// GET /api/orders/:orderId - Get status of a specific order for the authenticated user
+router.get('/:orderId', authenticate, getOrderStatus);
 
-// --- User-specific orders ---
-router.get("/myorders", getMyOrders);
-router.get("/:orderId/status", getOrderStatus);
-router.post("/:orderId/cancel", cancelOrderController);
+// GET /api/orders - Get all orders (Admin only)
+router.get('/', authenticate, authorizeAdmin, getAllOrders);
 
-// --- Admin-only route for updating order status ---
-router.put("/:orderId/status", updateOrderStatus);
-router.get("/", getAllOrders);
+// --- CORRECTED ROUTE WITH DIAGNOSTIC LOGGING ---
+// PUT /api/orders/:orderId/status - Update an order's status (Admin only)
+router.put(
+    '/:orderId/status', 
+    authenticate, 
+    authorizeAdmin, 
+    (req, res, next) => {
+        console.log('--- ROUTE HANDLER FOR /:orderId/status REACHED ---');
+        next();
+    },
+    updateOrderStatus
+);
 
-// --- Invoice download route ---
-router.get("/:orderId/invoice", async (req, res) => {
-    try {
-        const { orderId } = req.params;
-        const order = await Order.findById(orderId).populate("user", "name email");
+// POST /api/orders/user/:userId/orders/cod - Create a Cash on Delivery order
+router.post('/user/:userId/orders/cod', authenticate, createCashOnDeliveryOrder);
 
-        if (!order) return res.status(404).json({ message: "Order not found" });
+// PUT /api/orders/:orderId/cancel - Cancel an order (User)
+router.put('/:orderId/cancel', authenticate, cancelOrderController);
 
-        // Security: only owner or admin can download
-        if (!req.user.isAdmin && order.user._id.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ message: "You are not authorized to access this invoice" });
-        }
+// PUT /api/orders/:orderId/return - Request to return an order (User)
+router.put('/:orderId/return', authenticate, returnOrderController);
 
-        if (order.status !== "Delivered") {
-            return res.status(400).json({ message: "Invoice is available only after delivery" });
-        }
+// NEW: Add the route for downloading an invoice
+// GET /api/orders/:orderId/invoice - Download a PDF invoice for an order
+router.get('/:orderId/invoice', authenticate, downloadInvoiceController);
 
-        // Generate PDF
-        const doc = new PDFDocument({ margin: 50 });
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename=invoice_${orderId}.pdf`);
-        doc.pipe(res);
-
-        // --- Header ---
-        doc.fontSize(20).text("Invoice", { align: "center" });
-        doc.moveDown();
-
-        // --- Customer Info ---
-        doc.fontSize(12).text(`Invoice No: ${order._id}`);
-        doc.text(`Date: ${new Date(order.createdAt).toLocaleDateString()}`);
-        doc.moveDown();
-        doc.text(`Customer: ${order.user?.name || "N/A"}`);
-        doc.text(`Email: ${order.user?.email || "N/A"}`);
-        doc.moveDown();
-
-        // --- Items ---
-        doc.fontSize(12).text("Items:", { underline: true });
-        doc.moveDown(0.5);
-        order.orderItems.forEach((item, idx) => {
-            doc.text(`${idx + 1}. ${item.name} - Qty: ${item.quantity} x ₹${item.price} = ₹${item.quantity * item.price}`);
-        });
-
-        // --- Total ---
-        doc.moveDown();
-        doc.fontSize(14).text(`Total: ₹${order.totalAmount}`, { align: "right" });
-
-        // --- Footer ---
-        doc.moveDown(2);
-        doc.fontSize(10).text("Thank you for shopping with us!", { align: "center" });
-
-        doc.end();
-    } catch (error) {
-        console.error("Invoice generation failed:", error);
-        res.status(500).json({ message: "Server error generating invoice" });
-    }
-});
 
 module.exports = router;
