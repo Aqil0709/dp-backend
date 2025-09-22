@@ -135,7 +135,7 @@ const generateInvoicePdf = (doc, order) => {
     // Reset y to start of address section and draw right column (Buyer)
     doc.y = addressY;
     doc.font('Helvetica-Bold').text('Buyer (Bill to):', rightColX, addressY, { width: halfWidth });
-    doc.font('Helvetica').text(order.shippingAddress.name, { width: halfWidth });
+    doc.font('Helvetica').text(user.shippingAddress.name, { width: halfWidth });
     doc.text(`${order.shippingAddress.address}, ${order.shippingAddress.locality}`, { width: halfWidth });
     doc.text(`${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.pincode}`, { width: halfWidth });
     doc.font('Helvetica-Bold').text('State Name: ', { continued: true }).font('Helvetica').text(`${order.shippingAddress.state}, Code: 27`);
