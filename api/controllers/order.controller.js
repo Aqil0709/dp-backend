@@ -5,6 +5,19 @@ const User = require('../../models/user.model');
 const Cart = require('../../models/cart.model');
 const Product = require('../../models/product.model');
 
+// --- IMPORTANT SCHEMA CHANGE NOTE ---
+// To enable notifications, you must add a new field to your Order Schema in `order.model.js`.
+// This field will track whether an admin has seen the order.
+//
+// Add the following line to your `orderSchema`:
+//
+// isNew: {
+//   type: Boolean,
+//   default: true,
+// },
+//
+// --- END OF NOTE ---
+
 
 // --- Utility function to convert numbers to words ---
 const amountToWords = (num) => {
@@ -105,7 +118,7 @@ const generateInvoicePdf = (doc, order) => {
 
     addDetail('Invoice No.:', `CASH-${order._id.toString().slice(-5).toUpperCase()}`);
     addDetail('Dated:', new Date(order.createdAt).toLocaleDateString('en-GB'));
-  
+ 
     addDetail('Mode/Terms of Payment:', order.paymentMethod);
 
 
@@ -332,7 +345,9 @@ const updateOrderStatus = async (req, res) => {
     const { status } = req.body;
     if (!status) return res.status(400).json({ message: 'New status is required.' });
     try {
-        const order = await Order.findByIdAndUpdate(orderId, { status }, { new: true });
+        // --- MODIFIED: Set isNew to false when status is updated ---
+        // This marks the order as "seen" and removes it from the notification count.
+        const order = await Order.findByIdAndUpdate(orderId, { status, isNew: false }, { new: true });
         if (!order) return res.status(404).json({ message: 'Order not found.' });
         res.status(200).json({ message: 'Order status updated successfully.', order });
     } catch (error) {
