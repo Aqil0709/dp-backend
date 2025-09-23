@@ -105,17 +105,9 @@ const generateInvoicePdf = (doc, order) => {
 
     addDetail('Invoice No.:', `CASH-${order._id.toString().slice(-5).toUpperCase()}`);
     addDetail('Dated:', new Date(order.createdAt).toLocaleDateString('en-GB'));
-    addDetail('Delivery Note:', '');
+  
     addDetail('Mode/Terms of Payment:', order.paymentMethod);
-    addDetail('Reference No. & Date:', '');
-    addDetail('Other References:', '');
-    addDetail("Buyer's Order No.:", '');
-    addDetail("Dated:", '');
-    addDetail("Dispatch Doc No:", '');
-    addDetail("Delivery Note Date:", '');
-    addDetail("Dispatched through:", '');
-    addDetail("Destination:", '');
-    addDetail("Terms of Delivery:", '');
+
 
     doc.y = Math.max(leftHeight, detailsY) + 10;
     doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(pageMargin, doc.y).lineTo(doc.page.width - pageMargin, doc.y).stroke();
@@ -263,96 +255,119 @@ const generateInvoicePdf = (doc, order) => {
 
 // --- Main Controller ---
 const downloadInvoiceController = async (req, res) => {
-    const { orderId } = req.params;
-    const userId = req.user._id;
-    const userRole = req.user.role;
+    const { orderId } = req.params;
+    const userId = req.user._id;
+    const userRole = req.user.role;
 
-    try {
-        const order = await Order.findById(orderId).populate('user', 'name');
-        if (!order) {
-            return res.status(404).json({ message: 'Invoice not found.' });
-        }
-        if (order.user._id.toString() !== userId.toString() && userRole !== 'admin') {
-            return res.status(403).json({ message: 'You are not authorized to download this invoice.' });
-        }
-        
-        const doc = new PDFDocument({ size: 'A4', margin: 40 });
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=invoice_${orderId}.pdf`);
-        doc.pipe(res);
+    try {
+        const order = await Order.findById(orderId).populate('user', 'name');
+        if (!order) {
+            return res.status(404).json({ message: 'Invoice not found.' });
+        }
+        if (order.user._id.toString() !== userId.toString() && userRole !== 'admin') {
+            return res.status(403).json({ message: 'You are not authorized to download this invoice.' });
+        }
+        
+        const doc = new PDFDocument({ size: 'A4', margin: 40 });
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=invoice_${orderId}.pdf`);
+        doc.pipe(res);
 
-        generateInvoicePdf(doc, order);
-        
-        doc.end();
-    } catch (error) {
-        console.error('Invoice download error:', error);
-        res.status(500).json({ message: 'Failed to download invoice. Please try again.' });
-    }
+        generateInvoicePdf(doc, order);
+        
+        doc.end();
+    } catch (error) {
+        console.error('Invoice download error:', error);
+        res.status(500).json({ message: 'Failed to download invoice. Please try again.' });
+    }
 };
 
 const getAllOrders = async (req, res) => {
-    try {
-        const orders = await Order.find({}).populate('user', 'name mobileNumber').sort({ createdAt: -1 });
-        res.status(200).json(orders);
-    } catch (error) {
-        res.status(500).json({ message: 'Server error while fetching orders.' });
-    }
+    try {
+        // --- MODIFIED: Populating full user and product details for the admin dashboard ---
+        const orders = await Order.find({})
+            .populate('user', 'name mobileNumber email') // Get more user details
+            .populate({
+                path: 'orderItems.product', // Populate the 'product' field within the 'orderItems' array
+                model: 'Product',
+                select: 'name images category' // Select specific fields from the product model
+            })
+            .sort({ createdAt: -1 });
+        res.status(200).json(orders);
+    } catch (error) {
+        console.error("Error fetching all orders:", error);
+        res.status(500).json({ message: 'Server error while fetching orders.' });
+    }
 };
 
 const getMyOrders = async (req, res) => {
-    try {
-        const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 });
-        res.status(200).json(orders);
-    } catch (error) {
-        res.status(500).json({ message: "Server error while fetching user's orders." });
-    }
+    try {
+        // --- MODIFIED: Populating product details for the user's order history ---
+        const orders = await Order.find({ user: req.user._id })
+            .populate({
+                path: 'orderItems.product',
+                model: 'Product',
+                select: 'name images category'
+            })
+            .sort({ createdAt: -1 });
+        res.status(200).json(orders);
+    } catch (error) {
+        res.status(500).json({ message: "Server error while fetching user's orders." });
+    }
 };
 
 const getOrderStatus = async (req, res) => {
-    const { orderId } = req.params;
-    try {
-        const order = await Order.findOne({ _id: orderId, user: req.user._id });
-        if (!order) return res.status(404).json({ message: 'Order not found.' });
-        res.status(200).json({ order });
-    } catch (error) {
-        res.status(500).json({ message: 'Server error while fetching order status.' });
-    }
+    const { orderId } = req.params;
+    try {
+        const order = await Order.findOne({ _id: orderId, user: req.user._id });
+        if (!order) return res.status(404).json({ message: 'Order not found.' });
+        res.status(200).json({ order });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error while fetching order status.' });
+    }
 };
 
 const updateOrderStatus = async (req, res) => {
-    const { orderId } = req.params;
-    const { status } = req.body;
-    if (!status) return res.status(400).json({ message: 'New status is required.' });
-    try {
-        const order = await Order.findByIdAndUpdate(orderId, { status }, { new: true });
-        if (!order) return res.status(404).json({ message: 'Order not found.' });
-        res.status(200).json({ message: 'Order status updated successfully.', order });
-    } catch (error) {
-        res.status(500).json({ message: 'Server error while updating order status.' });
-    }
+    const { orderId } = req.params;
+    const { status } = req.body;
+    if (!status) return res.status(400).json({ message: 'New status is required.' });
+    try {
+        const order = await Order.findByIdAndUpdate(orderId, { status }, { new: true });
+        if (!order) return res.status(404).json({ message: 'Order not found.' });
+        res.status(200).json({ message: 'Order status updated successfully.', order });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error while updating order status.' });
+    }
 };
 
 const createCashOnDeliveryOrder = async (req, res) => {
-    const { userId } = req.params;
-    const { deliveryAddressId } = req.body;
-    const session = await mongoose.startSession();
-    try {
-        session.startTransaction();
-        const user = await User.findById(userId).session(session);
-        const cart = await Cart.findOne({ user: userId }).populate('items.product').session(session);
-        if (!cart || cart.items.length === 0) throw new Error('Cannot place an order with an empty cart.');
-        const address = user.addresses.id(deliveryAddressId);
-        if (!address) throw new Error('Delivery address not found.');
-        
-        const orderItems = [];
-        let totalAmount = 0;
-        for (const item of cart.items) {
-            const product = item.product; 
-            if (!product || product.quantity < item.quantity) throw new Error(`Insufficient stock for product "${product.name}".`);
-            await Product.updateOne({ _id: product._id }, { $inc: { quantity: -item.quantity } }, { session });
-            orderItems.push({ product: product._id, name: product.name, quantity: item.quantity, price: product.price, image: product.images[0] });
-            totalAmount += item.quantity * product.price;
-        }
+    const { userId } = req.params;
+    const { deliveryAddressId } = req.body;
+    const session = await mongoose.startSession();
+    try {
+        session.startTransaction();
+        const user = await User.findById(userId).session(session);
+        const cart = await Cart.findOne({ user: userId }).populate('items.product').session(session);
+        if (!cart || cart.items.length === 0) throw new Error('Cannot place an order with an empty cart.');
+        const address = user.addresses.id(deliveryAddressId);
+        if (!address) throw new Error('Delivery address not found.');
+        
+        const orderItems = [];
+        let totalAmount = 0;
+        for (const item of cart.items) {
+            const product = item.product; 
+            if (!product || product.quantity < item.quantity) throw new Error(`Insufficient stock for product "${product.name}".`);
+            await Product.updateOne({ _id: product._id }, { $inc: { quantity: -item.quantity } }, { session });
+            // --- FIX: Store image URL as a string, not an object ---
+            orderItems.push({ 
+                product: product._id, 
+                name: product.name, 
+                quantity: item.quantity, 
+                price: product.price, 
+                image: product.images[0]?.url || '' // Safely access the URL
+            });
+            totalAmount += item.quantity * product.price;
+        }
         
         // --- ADD GST & ROUND OFF TO TOTAL ---
         const taxableValue = totalAmount;
@@ -361,79 +376,78 @@ const createCashOnDeliveryOrder = async (req, res) => {
         const finalTotal = Math.round(taxableValue + cgst + sgst);
 
 
-        const order = new Order({ user: userId, orderItems, shippingAddress: address, totalAmount: finalTotal, paymentMethod: 'COD', paymentStatus: 'Pending (COD)' });
-        await order.save({ session });
-        cart.items = [];
-        await cart.save({ session });
-        await session.commitTransaction();
-        res.status(201).json({ message: 'Order placed successfully!', order });
-    } catch (error) {
-        await session.abortTransaction();
-        res.status(500).json({ message: error.message || 'Server error while placing order.' });
-    } finally {
-        session.endSession();
-    }
+        const order = new Order({ user: userId, orderItems, shippingAddress: address, totalAmount: finalTotal, paymentMethod: 'COD', paymentStatus: 'Pending (COD)' });
+        await order.save({ session });
+        cart.items = [];
+        await cart.save({ session });
+        await session.commitTransaction();
+        res.status(201).json({ message: 'Order placed successfully!', order });
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(500).json({ message: error.message || 'Server error while placing order.' });
+    } finally {
+        session.endSession();
+    }
 };
 
 const createPendingUpiOrder = (req, res) => {
-    res.status(501).json({ message: "UPI endpoint not yet implemented with Mongoose." });
+    res.status(501).json({ message: "UPI endpoint not yet implemented with Mongoose." });
 };
 
 const cancelOrderController = async (req, res) => {
-    const { orderId } = req.params;
-    const userId = req.user._id;
-    const session = await mongoose.startSession();
-    try {
-        session.startTransaction();
-        const order = await Order.findOne({ _id: orderId, user: userId }).session(session);
-        if (!order) throw new Error('Order not found or you do not have permission to cancel it.');
-        const orderDate = new Date(order.createdAt);
-        const now = new Date();
-        const hoursDifference = (now.getTime() - orderDate.getTime()) / (1000 * 60 * 60);
-        if (hoursDifference > 4) throw new Error('The 4-hour cancellation window has passed.');
-        if (order.status === 'Cancelled' || order.status === 'Delivered') throw new Error(`Order cannot be cancelled as it is already ${order.status}.`);
-        for (const item of order.orderItems) {
-            await Product.updateOne({ _id: item.product }, { $inc: { quantity: item.quantity } }).session(session);
-        }
-        order.status = 'Cancelled';
-        await order.save({ session });
-        await session.commitTransaction();
-        res.status(200).json({ message: 'Order has been successfully cancelled.' });
-    } catch (error) {
-        await session.abortTransaction();
-        res.status(500).json({ message: error.message || 'Failed to cancel order.' });
-    } finally {
-        session.endSession();
-    }
+    const { orderId } = req.params;
+    const userId = req.user._id;
+    const session = await mongoose.startSession();
+    try {
+        session.startTransaction();
+        const order = await Order.findOne({ _id: orderId, user: userId }).session(session);
+        if (!order) throw new Error('Order not found or you do not have permission to cancel it.');
+        const orderDate = new Date(order.createdAt);
+        const now = new Date();
+        const hoursDifference = (now.getTime() - orderDate.getTime()) / (1000 * 60 * 60);
+        if (hoursDifference > 4) throw new Error('The 4-hour cancellation window has passed.');
+        if (order.status === 'Cancelled' || order.status === 'Delivered') throw new Error(`Order cannot be cancelled as it is already ${order.status}.`);
+        for (const item of order.orderItems) {
+            await Product.updateOne({ _id: item.product }, { $inc: { quantity: item.quantity } }).session(session);
+        }
+        order.status = 'Cancelled';
+        await order.save({ session });
+        await session.commitTransaction();
+        res.status(200).json({ message: 'Order has been successfully cancelled.' });
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(500).json({ message: error.message || 'Failed to cancel order.' });
+    } finally {
+        session.endSession();
+    }
 };
 
 const returnOrderController = async (req, res) => {
-    const { orderId } = req.params;
-    const { reason } = req.body;
-    const userId = req.user._id;
-    if (!reason) return res.status(400).json({ message: 'A reason for return is required.' });
-    try {
-        const order = await Order.findOne({ _id: orderId, user: userId });
-        if (!order) return res.status(404).json({ message: 'Order not found or you do not have permission to return it.' });
-        if (order.status !== 'Delivered') return res.status(400).json({ message: `Order can only be returned after it has been delivered. Current status: ${order.status}` });
-        order.status = 'Return Requested';
-        order.returnReason = reason;
-        await order.save();
-        res.status(200).json({ message: 'Return request submitted successfully.', order });
-    } catch (error) {
-        res.status(500).json({ message: error.message || 'Failed to submit return request.' });
-    }
+    const { orderId } = req.params;
+    const { reason } = req.body;
+    const userId = req.user._id;
+    if (!reason) return res.status(400).json({ message: 'A reason for return is required.' });
+    try {
+        const order = await Order.findOne({ _id: orderId, user: userId });
+        if (!order) return res.status(404).json({ message: 'Order not found or you do not have permission to return it.' });
+        if (order.status !== 'Delivered') return res.status(400).json({ message: `Order can only be returned after it has been delivered. Current status: ${order.status}` });
+        order.status = 'Return Requested';
+        order.returnReason = reason;
+        await order.save();
+        res.status(200).json({ message: 'Return request submitted successfully.', order });
+    } catch (error) {
+        res.status(500).json({ message: error.message || 'Failed to submit return request.' });
+    }
 };
 
 module.exports = {
-    getAllOrders,
-    createPendingUpiOrder,
-    createCashOnDeliveryOrder,
-    getOrderStatus,
-    getMyOrders,
-    cancelOrderController,
-    updateOrderStatus,
-    returnOrderController,
-    downloadInvoiceController,
+    getAllOrders,
+    createPendingUpiOrder,
+    createCashOnDeliveryOrder,
+    getOrderStatus,
+    getMyOrders,
+    cancelOrderController,
+    updateOrderStatus,
+    returnOrderController,
+    downloadInvoiceController,
 };
-
