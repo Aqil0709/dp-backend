@@ -220,12 +220,7 @@ const generateInvoicePdf = (doc, order) => {
     doc.y = y;
 
     // --- Amount in Words ---
-    doc.fontSize(9).font('Helvetica').text(`Amount Chargeable : ${amountToWords(grandTotal)}`, { width: contentWidth });
-    doc.moveDown(1);
-    y = doc.y;
-    doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(pageMargin, y).lineTo(doc.page.width - pageMargin, y).stroke();
-    y += 10;
-    doc.y = y;
+   
 
     // --- Tax Summary Table ---
     doc.fontSize(8).font('Helvetica-Bold').text('HSN/SAC', 50, y);
@@ -247,11 +242,7 @@ const generateInvoicePdf = (doc, order) => {
     doc.y = y;
 
     // --- Tax in Words ---
-    doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(pageMargin, y).lineTo(doc.page.width - pageMargin, y).stroke();
-    y += 5;
-    doc.fontSize(9).text(`Tax Amount <br/> 
-        : ${amountToWords(totalTaxAmount)}`, { width: contentWidth });
-    y = doc.y + 20;
+
 
 
     // --- Footer ---
