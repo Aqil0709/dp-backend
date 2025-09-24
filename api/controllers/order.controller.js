@@ -219,9 +219,6 @@ const generateInvoicePdf = (doc, order) => {
     y += 5;
     doc.y = y;
 
-    // --- Amount in Words ---
-   
-
     // --- Tax Summary Table ---
     doc.fontSize(8).font('Helvetica-Bold').text('HSN/SAC', 50, y);
     doc.text('Taxable Value', 120, y);
@@ -240,10 +237,6 @@ const generateInvoicePdf = (doc, order) => {
     doc.text(`₹${totalTaxAmount.toFixed(2)}`, 480, y, {align: 'right'});
     y = doc.y + 10;
     doc.y = y;
-
-    // --- Tax in Words ---
-
-
 
     // --- Footer ---
     doc.font('Helvetica-Bold').fontSize(9).text('Declaration', pageMargin, y, {underline: true});
