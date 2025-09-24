@@ -1,36 +1,23 @@
 const express = require('express');
 const router = express.Router();
 
-// 1. IMPORT the 'authenticate' middleware
-const { authenticate } = require('../middleware/auth.middleware');
+// Ensure the imported functions match the new Mongoose controller's exports
+const { getCart, addToCart, updateCartItem, removeCartItem, clearUserCart  } = require('./cart.controller');
 
-// 2. Import all controller functions
-const { 
-    getCart, 
-    addToCart, 
-    updateCartItem, 
-    removeCartItem, 
-    clearUserCart 
-} = require('../cart/cart.controller');
+// GET /api/cart/:userId - Get a user's cart
+router.get('/:userId', getCart);
 
-// --- SECURED CART ROUTES ---
-// The user's ID will now be taken from their authentication token (req.user._id) 
-// instead of the URL, which is much more secure.
+// POST /api/cart/:userId/add - Add an item to the cart
+router.post('/:userId/add', addToCart);
 
-// GET /api/cart - Get the authenticated user's cart
-router.get('/', authenticate, getCart);
+// PUT /api/cart/:userId/update/:productId - Update an item's quantity
+router.put('/:userId/update/:productId', updateCartItem);
 
-// POST /api/cart/add - Add an item to the cart
-router.post('/add', authenticate, addToCart);
+// DELETE /api/cart/:userId/remove/:productId - Remove an item from the cart
+router.delete('/:userId/remove/:productId', removeCartItem);
 
-// PUT /api/cart/update/:productId - Update an item's quantity
-router.put('/update/:productId', authenticate, updateCartItem);
-
-// DELETE /api/cart/remove/:productId - Remove an item from the cart
-router.delete('/remove/:productId', authenticate, removeCartItem);
-
-// DELETE /api/cart/clear - Clears all items from the user's cart
+// This route will handle the DELETE request from your AppContext's clearCart function
 router.delete('/clear', authenticate, clearUserCart);
 
-module.exports = router;
 
+module.exports = router;
