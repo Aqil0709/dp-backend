@@ -137,9 +137,39 @@ const removeCartItem = async (req, res) => {
     }
 };
 
+/**
+ * @description Clears all items from a user's cart. This is called after a successful order.
+ */
+const clearUserCart = async (req, res) => {
+    try {
+        // The user's ID is available from the 'authenticate' middleware via req.user
+        const userId = req.user._id;
+
+        // Find the user's cart and update it by setting the 'items' array to be empty.
+        const updatedCart = await Cart.findOneAndUpdate(
+            { user: userId },
+            { $set: { items: [] } },
+            { new: true } // This option returns the updated (now empty) document
+        );
+
+        if (!updatedCart) {
+            // This case might happen if the user had an account but never a cart. It's safe to just return success.
+            return res.status(200).json({ message: 'Cart is already empty or was not found.' });
+        }
+
+        console.log(`Cart cleared for user: ${userId}`);
+        res.status(200).json({ message: 'Cart cleared successfully.', cart: [] });
+
+    } catch (error) {
+        console.error('Error clearing user cart:', error);
+        res.status(500).json({ message: 'Server error while clearing cart.' });
+    }
+};
+
 module.exports = {
     getCart,
     addToCart,
     updateCartItem,
     removeCartItem,
+    clearUserCart,
 };
