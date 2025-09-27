@@ -166,7 +166,7 @@ const registerUser = async (req, res) => {
         const token = jwt.sign(
             { userId: user._id, role: user.role }, // Use user._id from MongoDB
             process.env.JWT_SECRET,
-            { expiresIn: '1h' }
+            { expiresIn: '12h' }
         );
 
         res.status(201).json({
