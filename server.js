@@ -19,8 +19,7 @@ const stockRoutes = require('./api/stock/stock.routes');
 const userRoutes = require('./api/users/user.routes');
 const adminRoutes = require('./api/admin/admin.routes');
 const paymentRoutes = require("./api/routes/payment.routes");
-// --- FIX: Corrected the path to the wishlist routes file for consistency ---
-const wishlistRoutes = require('./api/routes/wishlist.routes'); 
+const wishlistRoutes = require('./api/routes/wishlist.routes');
 
 // Connect to MongoDB Atlas
 connectDB();
@@ -30,34 +29,41 @@ const PORT = process.env.PORT || 5002;
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: [process.env.FRONTEND_URL || 'https://aaisahebvastram.com', 'http://localhost:3000'],
-    methods: ["GET", "POST"]
-  }
+  cors: {
+    origin: [process.env.FRONTEND_URL || 'https://aaisahebvastram.com', 'http://localhost:3000'],
+    methods: ["GET", "POST"]
+  }
 });
 
 // --- CORS Configuration ---
 const allowedOrigins = [
-    process.env.FRONTEND_URL || 'https://aaisahebvastram.com',
-    'http://localhost:3000'
+    process.env.FRONTEND_URL || 'https://aaisahebvastram.com',
+    'http://localhost:3000'
 ];
 const corsOptions = {
-    origin: function (origin, callback) {
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
 };
 app.use(cors(corsOptions));
 
 // --- MIDDLEWARE ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// --- NEW: Middleware to make Socket.IO instance available in all routes ---
+// This must be placed BEFORE your API routes.
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
 
 // --- API ROUTES ---
 app.use('/auth', authRoutes);
@@ -70,53 +76,60 @@ app.use('/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/public', express.static(path.join(__dirname, 'public')));
 app.use("/api/payment", paymentRoutes);
-
-// --- Use the wishlist routes with the correct prefix ---
 app.use('/api/wishlist', wishlistRoutes);
 
 
-// --- REAL-TIME VISITOR STATS LOGIC ---
+// --- REAL-TIME LOGIC (VISITORS & NOTIFICATIONS) ---
 let onlineVisitors = 0;
 const getMonthlyVisitors = () => {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const monthlySeed = (year * 12 + month);
-    const monthlyFluctuation = (monthlySeed * 137) % 5000;
-    return 11000 + monthlyFluctuation;
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const monthlySeed = (year * 12 + month);
+    const monthlyFluctuation = (monthlySeed * 137) % 5000;
+    return 11000 + monthlyFluctuation;
 };
 
 const emitVisitorStats = () => {
-    const stats = {
-        online: onlineVisitors,
-        monthly: getMonthlyVisitors()
-    };
-    io.emit('visitorStatsUpdate', stats);
+    const stats = {
+        online: onlineVisitors,
+        monthly: getMonthlyVisitors()
+    };
+    io.emit('visitorStatsUpdate', stats);
 };
 
 io.on('connection', (socket) => {
-  onlineVisitors++;
-  console.log(`A user connected. Total online: ${onlineVisitors}`);
-  emitVisitorStats();
+  // --- Existing Visitor Stats Logic ---
+  onlineVisitors++;
+  console.log(`A user connected. Total online: ${onlineVisitors}`);
+  emitVisitorStats();
 
-  socket.on('disconnect', () => {
-    onlineVisitors--;
-    console.log(`A user disconnected. Total online: ${onlineVisitors}`);
-    emitVisitorStats();
-  });
+  // --- NEW: Admin Notification Room Logic ---
+  // This listens for an admin client joining their dedicated room.
+  socket.on('join_admin_room', () => {
+    socket.join('admins');
+    console.log(`Socket ${socket.id} joined the admin notification room.`);
+  });
+
+  // --- Existing Disconnect Logic ---
+  socket.on('disconnect', () => {
+    onlineVisitors--;
+    console.log(`A user disconnected. Total online: ${onlineVisitors}`);
+    emitVisitorStats();
+  });
 });
 
 // --- Fallback and Error Handler ---
 app.use((req, res, next) => {
-    res.status(404).json({ message: 'API Route not found' });
+    res.status(404).json({ message: 'API Route not found' });
 });
 app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ message: 'Something went wrong!', error: err.message });
+    console.error(err.stack);
+    res.status(500).json({ message: 'Something went wrong!', error: err.message });
 });
 
 // --- SERVER START ---
 server.listen(PORT, () => {
-    console.log(`Backend server with real-time support is running on port ${PORT}`);
+    console.log(`Backend server with real-time support is running on port ${PORT}`);
 });
 

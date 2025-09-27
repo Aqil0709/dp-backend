@@ -118,9 +118,7 @@ const generateInvoicePdf = (doc, order) => {
 
     addDetail('Invoice No.:', `CASH-${order._id.toString().slice(-5).toUpperCase()}`);
     addDetail('Dated:', new Date(order.createdAt).toLocaleDateString('en-GB'));
- 
     addDetail('Mode/Terms of Payment:', order.paymentMethod);
-
 
     doc.y = Math.max(leftHeight, detailsY) + 10;
     doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(pageMargin, doc.y).lineTo(doc.page.width - pageMargin, doc.y).stroke();
@@ -282,13 +280,12 @@ const downloadInvoiceController = async (req, res) => {
 
 const getAllOrders = async (req, res) => {
     try {
-        // --- MODIFIED: Populating full user and product details for the admin dashboard ---
         const orders = await Order.find({})
-            .populate('user', 'name mobileNumber email') // Get more user details
+            .populate('user', 'name mobileNumber email')
             .populate({
-                path: 'orderItems.product', // Populate the 'product' field within the 'orderItems' array
+                path: 'orderItems.product',
                 model: 'Product',
-                select: 'name images category' // Select specific fields from the product model
+                select: 'name images category'
             })
             .sort({ createdAt: -1 });
         res.status(200).json(orders);
@@ -300,7 +297,6 @@ const getAllOrders = async (req, res) => {
 
 const getMyOrders = async (req, res) => {
     try {
-        // --- MODIFIED: Populating product details for the user's order history ---
         const orders = await Order.find({ user: req.user._id })
             .populate({
                 path: 'orderItems.product',
@@ -330,10 +326,16 @@ const updateOrderStatus = async (req, res) => {
     const { status } = req.body;
     if (!status) return res.status(400).json({ message: 'New status is required.' });
     try {
-        // --- MODIFIED: Set isNew to false when status is updated ---
-        // This marks the order as "seen" and removes it from the notification count.
         const order = await Order.findByIdAndUpdate(orderId, { status, isNew: false }, { new: true });
         if (!order) return res.status(404).json({ message: 'Order not found.' });
+
+        // --- REAL-TIME NOTIFICATION ---
+        // Notify other connected admins that the status has changed.
+        req.io.to('admins').emit('order_status_update', {
+            message: `Admin updated order #${order._id.toString().slice(-5).toUpperCase()} to "${status}".`,
+            order: order
+        });
+        
         res.status(200).json({ message: 'Order status updated successfully.', order });
     } catch (error) {
         res.status(500).json({ message: 'Server error while updating order status.' });
@@ -358,29 +360,34 @@ const createCashOnDeliveryOrder = async (req, res) => {
             const product = item.product; 
             if (!product || product.quantity < item.quantity) throw new Error(`Insufficient stock for product "${product.name}".`);
             await Product.updateOne({ _id: product._id }, { $inc: { quantity: -item.quantity } }, { session });
-            // --- FIX: Store image URL as a string, not an object ---
             orderItems.push({ 
                 product: product._id, 
                 name: product.name, 
                 quantity: item.quantity, 
                 price: product.price, 
-                image: product.images[0]?.url || '' // Safely access the URL
+                image: product.images[0]?.url || ''
             });
             totalAmount += item.quantity * product.price;
         }
         
-        // --- ADD GST & ROUND OFF TO TOTAL ---
         const taxableValue = totalAmount;
         const cgst = taxableValue * 0.025;
         const sgst = taxableValue * 0.025;
         const finalTotal = Math.round(taxableValue + cgst + sgst);
-
 
         const order = new Order({ user: userId, orderItems, shippingAddress: address, totalAmount: finalTotal, paymentMethod: 'COD', paymentStatus: 'Pending (COD)' });
         await order.save({ session });
         cart.items = [];
         await cart.save({ session });
         await session.commitTransaction();
+
+        // --- REAL-TIME NOTIFICATION ---
+        // Emit a 'new_order' event to the 'admins' room.
+        req.io.to('admins').emit('new_order', {
+          message: `New COD order #${order._id.toString().slice(-5).toUpperCase()} has been placed.`,
+          order: order
+        });
+
         res.status(201).json({ message: 'Order placed successfully!', order });
     } catch (error) {
         await session.abortTransaction();
@@ -413,6 +420,14 @@ const cancelOrderController = async (req, res) => {
         order.status = 'Cancelled';
         await order.save({ session });
         await session.commitTransaction();
+
+        // --- REAL-TIME NOTIFICATION ---
+        // Emit an 'order_status_update' event to the 'admins' room.
+        req.io.to('admins').emit('order_status_update', {
+            message: `Order #${order._id.toString().slice(-5).toUpperCase()} has been cancelled by the user.`,
+            order: order
+        });
+
         res.status(200).json({ message: 'Order has been successfully cancelled.' });
     } catch (error) {
         await session.abortTransaction();
@@ -434,6 +449,14 @@ const returnOrderController = async (req, res) => {
         order.status = 'Return Requested';
         order.returnReason = reason;
         await order.save();
+
+        // --- REAL-TIME NOTIFICATION ---
+        // Emit an 'order_status_update' event to the 'admins' room.
+        req.io.to('admins').emit('order_status_update', {
+            message: `A return has been requested for order #${order._id.toString().slice(-5).toUpperCase()}.`,
+            order: order
+        });
+
         res.status(200).json({ message: 'Return request submitted successfully.', order });
     } catch (error) {
         res.status(500).json({ message: error.message || 'Failed to submit return request.' });
