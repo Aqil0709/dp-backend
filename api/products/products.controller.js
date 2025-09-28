@@ -7,32 +7,32 @@ const fs = require('fs');
 
 // --- Helper: Delete local temp files ---
 const deleteLocalFile = (filePath) => {
-  if (!filePath) return;
-  fs.unlink(filePath, (err) => {
-    if (err) console.error("Error deleting temp file:", err);
-  });
+  if (!filePath) return;
+  fs.unlink(filePath, (err) => {
+    if (err) console.error("Error deleting temp file:", err);
+  });
 };
 
 // --- PUBLIC ---
 const getAllProducts = async (req, res) => {
-  try {
-    const products = await Product.find({}).sort({ createdAt: -1 });
-    res.status(200).json(products);
-  } catch (error) {
-    console.error('Get all products error:', error);
-    res.status(500).json({ message: 'Server error while fetching products.' });
-  }
+  try {
+    const products = await Product.find({}).sort({ createdAt: -1 });
+    res.status(200).json(products);
+  } catch (error) {
+    console.error('Get all products error:', error);
+    res.status(500).json({ message: 'Server error while fetching products.' });
+  }
 };
 
 const getProductById = async (req, res) => {
-  try {
-    const product = await Product.findById(req.params.productId);
-    if (!product) return res.status(404).json({ message: 'Product not found.' });
-    res.status(200).json(product);
-  } catch (error) {
-    console.error('Get product by ID error:', error);
-    res.status(500).json({ message: 'Server error while fetching product.' });
-  }
+  try {
+    const product = await Product.findById(req.params.productId);
+    if (!product) return res.status(404).json({ message: 'Product not found.' });
+    res.status(200).json(product);
+  } catch (error) {
+    console.error('Get product by ID error:', error);
+    res.status(500).json({ message: 'Server error while fetching product.' });
+  }
 };
 
 // --- ADMIN ONLY ---
@@ -97,27 +97,19 @@ const updateProduct = async (req, res) => {
     if (name) updateFields.name = name;
     if (category) updateFields.category = category;
     if (description) updateFields.description = description;
-
-    // *** FIX: Added more robust parsing for numeric form fields ***
-    if (price !== undefined && price !== '' && !isNaN(Number(price))) {
-        updateFields.price = Number(price);
-    }
-    if (originalPrice !== undefined) {
-        const parsedOriginal = Number(originalPrice);
-        updateFields.originalPrice = !isNaN(parsedOriginal) && parsedOriginal > 0 ? parsedOriginal : null;
-    }
-    if (quantity !== undefined && quantity !== '' && !isNaN(Number(quantity))) {
-        updateFields.quantity = Number(quantity);
-    }
-
+    if (price) updateFields.price = Number(price);
+    if (originalPrice) updateFields.originalPrice = Number(originalPrice);
+    if (quantity) updateFields.quantity = Number(quantity);
     if (isSpecial !== undefined) updateFields.isSpecial = isSpecial === 'true';
     if (isTrending !== undefined) updateFields.isTrending = isTrending === 'true';
 
     let finalImages = [...product.images];
 
+    // *** FIX: Improved image retention and deletion logic ***
     if (currentImageUrlsToRetain) {
       let retainedUrls = [];
       try {
+        // FIX: Safely parse JSON to prevent crashes
         retainedUrls = JSON.parse(currentImageUrlsToRetain);
       } catch (parseError) {
         console.error("JSON parsing error for retained URLs:", parseError);
@@ -133,18 +125,13 @@ const updateProduct = async (req, res) => {
       finalImages = product.images.filter(img => retainedUrls.includes(img.url));
     }
 
+    // Upload new images if any are provided
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         const result = await cloudinary.uploader.upload(file.path, { folder: 'products' });
         deleteLocalFile(file.path);
         finalImages.push({ url: result.secure_url, public_id: result.public_id });
       }
-    }
-    
-    // *** FIX: Validate that there is at least one image before updating ***
-    if (finalImages.length === 0) {
-      if (req.files) req.files.forEach(file => deleteLocalFile(file.path));
-      return res.status(400).json({ message: 'Product must have at least one image.' });
     }
     
     updateFields.images = finalImages;
@@ -154,27 +141,29 @@ const updateProduct = async (req, res) => {
     res.status(200).json(updatedProduct);
   } catch (error) {
     console.error('Update product error:', error);
+    // Ensure temp files are deleted even if an error occurs mid-process
     if (req.files) req.files.forEach(file => deleteLocalFile(file.path));
     res.status(500).json({ message: 'Server error while updating product.' });
   }
 };
 
 const deleteProduct = async (req, res) => {
-  const { productId } = req.params;
-  try {
-    const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ message: 'Product not found.' });
+  const { productId } = req.params;
+  try {
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ message: 'Product not found.' });
 
-    for (const img of product.images) {
-      if (img.public_id) await cloudinary.uploader.destroy(img.public_id);
-    }
+    // ✅ Delete images from Cloudinary
+    for (const img of product.images) {
+      if (img.public_id) await cloudinary.uploader.destroy(img.public_id);
+    }
 
-    await Product.findByIdAndDelete(productId);
-    res.status(200).json({ message: 'Product deleted successfully.' });
-  } catch (error) {
-    console.error('Delete product error:', error);
-    res.status(500).json({ message: 'Server error while deleting product.' });
-  }
+    await Product.findByIdAndDelete(productId);
+    res.status(200).json({ message: 'Product deleted successfully.' });
+  } catch (error) {
+    console.error('Delete product error:', error);
+    res.status(500).json({ message: 'Server error while deleting product.' });
+  }
 };
 
 // --- STOCK ---
