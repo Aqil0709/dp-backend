@@ -37,107 +37,114 @@ const getProductById = async (req, res) => {
 
 // --- ADMIN ONLY ---
 const addProduct = async (req, res) => {
-  const { name, category, price, originalPrice, description, quantity, isSpecial, isTrending } = req.body;
+  const { name, category, price, originalPrice, description, quantity, isSpecial, isTrending } = req.body;
 
-  if (!req.files || req.files.length === 0) {
-    return res.status(400).json({ message: 'Product images are required.' });
-  }
-  if (!name || !category || !description || !price || !quantity) {
-    return res.status(400).json({ message: 'Required fields are missing.' });
-  }
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ message: 'Product images are required.' });
+  }
+  if (!name || !category || !description || !price || !quantity) {
+    // Clean up uploaded files if validation fails
+    req.files.forEach(file => deleteLocalFile(file.path));
+    return res.status(400).json({ message: 'Required fields are missing.' });
+  }
 
-  try {
-    const parsedPrice = Number(price);
-    const parsedQuantity = Number(quantity);
-    const parsedOriginalPrice = originalPrice ? Number(originalPrice) : undefined;
+  try {
+    const parsedPrice = Number(price);
+    const parsedQuantity = Number(quantity);
+    const parsedOriginalPrice = originalPrice ? Number(originalPrice) : undefined;
 
-    if (isNaN(parsedPrice) || parsedPrice <= 0 || isNaN(parsedQuantity) || parsedQuantity < 0) {
-      return res.status(400).json({ message: 'Price must be positive and quantity non-negative.' });
-    }
+    if (isNaN(parsedPrice) || parsedPrice <= 0 || isNaN(parsedQuantity) || parsedQuantity < 0) {
+      req.files.forEach(file => deleteLocalFile(file.path));
+      return res.status(400).json({ message: 'Price must be positive and quantity non-negative.' });
+    }
 
-    // ✅ Upload images to Cloudinary
-    const imageObjects = [];
-    for (const file of req.files) {
-      const result = await cloudinary.uploader.upload(file.path, { folder: 'products' });
-      deleteLocalFile(file.path);
-      imageObjects.push({ url: result.secure_url, public_id: result.public_id });
-    }
+    const imageObjects = [];
+    for (const file of req.files) {
+      const result = await cloudinary.uploader.upload(file.path, { folder: 'products' });
+      deleteLocalFile(file.path);
+      imageObjects.push({ url: result.secure_url, public_id: result.public_id });
+    }
 
-    const newProduct = await Product.create({
-      name,
-      category,
-      price: parsedPrice,
-      originalPrice: parsedOriginalPrice,
-      description,
-      quantity: parsedQuantity,
-      images: imageObjects,
-      isSpecial: isSpecial === 'true',
-      isTrending: isTrending === 'true',
-    });
+    const newProduct = await Product.create({
+      name, category, price: parsedPrice, originalPrice: parsedOriginalPrice,
+      description, quantity: parsedQuantity, images: imageObjects,
+      isSpecial: isSpecial === 'true', isTrending: isTrending === 'true',
+    });
 
-    res.status(201).json(newProduct);
-  } catch (error) {
-    console.error('Add product error:', error);
-    res.status(500).json({ message: 'Server error while adding product.' });
-  }
+    res.status(201).json(newProduct);
+  } catch (error) {
+    console.error('Add product error:', error);
+    res.status(500).json({ message: 'Server error while adding product.' });
+  }
 };
 
 const updateProduct = async (req, res) => {
-  const { productId } = req.params;
+  const { productId } = req.params;
 
-  if (!Types.ObjectId.isValid(productId)) {
-    return res.status(400).json({ message: 'Invalid product ID format.' });
-  }
+  if (!Types.ObjectId.isValid(productId)) {
+    return res.status(400).json({ message: 'Invalid product ID format.' });
+  }
 
-  try {
-    const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ message: 'Product not found.' });
+  try {
+    const product = await Product.findById(productId);
+    if (!product) {
+      if (req.files) req.files.forEach(file => deleteLocalFile(file.path));
+      return res.status(404).json({ message: 'Product not found.' });
+    }
 
-    const { name, category, description, price, originalPrice, quantity, isSpecial, isTrending, currentImageUrlsToRetain } = req.body;
+    const { name, category, description, price, originalPrice, quantity, isSpecial, isTrending, currentImageUrlsToRetain } = req.body;
+    const updateFields = {};
+    if (name) updateFields.name = name;
+    if (category) updateFields.category = category;
+    if (description) updateFields.description = description;
+    if (price) updateFields.price = Number(price);
+    if (originalPrice) updateFields.originalPrice = Number(originalPrice);
+    if (quantity) updateFields.quantity = Number(quantity);
+    if (isSpecial !== undefined) updateFields.isSpecial = isSpecial === 'true';
+    if (isTrending !== undefined) updateFields.isTrending = isTrending === 'true';
 
-    const updateFields = {};
-    if (name) updateFields.name = name;
-    if (category) updateFields.category = category;
-    if (description) updateFields.description = description;
-    if (price && !isNaN(Number(price))) updateFields.price = Number(price);
-    if (originalPrice && !isNaN(Number(originalPrice))) updateFields.originalPrice = Number(originalPrice);
-    if (quantity && !isNaN(Number(quantity))) updateFields.quantity = Number(quantity);
-    if (isSpecial !== undefined) updateFields.isSpecial = isSpecial === 'true';
-    if (isTrending !== undefined) updateFields.isTrending = isTrending === 'true';
+    let finalImages = [...product.images];
 
-    let newImages = [];
+    // *** FIX: Improved image retention and deletion logic ***
+    if (currentImageUrlsToRetain) {
+      let retainedUrls = [];
+      try {
+        // FIX: Safely parse JSON to prevent crashes
+        retainedUrls = JSON.parse(currentImageUrlsToRetain);
+      } catch (parseError) {
+        console.error("JSON parsing error for retained URLs:", parseError);
+        return res.status(400).json({ message: 'Invalid format for currentImageUrlsToRetain.' });
+      }
 
-    if (req.files && req.files.length > 0) {
-      // ✅ Upload new images
-      for (const file of req.files) {
-        const result = await cloudinary.uploader.upload(file.path, { folder: 'products' });
-        deleteLocalFile(file.path);
-        newImages.push({ url: result.secure_url, public_id: result.public_id });
-      }
-      // ✅ Delete old images from Cloudinary
-      for (const img of product.images) {
-        if (img.public_id) await cloudinary.uploader.destroy(img.public_id);
-      }
-    } else if (currentImageUrlsToRetain) {
-      const retainedUrls = JSON.parse(currentImageUrlsToRetain);
-      newImages = product.images.filter(img => retainedUrls.includes(img.url));
-    } else {
-      newImages = product.images;
-    }
+      const imagesToDelete = product.images.filter(img => !retainedUrls.includes(img.url));
+      for (const img of imagesToDelete) {
+        if (img.public_id) {
+          await cloudinary.uploader.destroy(img.public_id);
+        }
+      }
+      finalImages = product.images.filter(img => retainedUrls.includes(img.url));
+    }
 
-    if (!newImages || newImages.length === 0) {
-      return res.status(400).json({ message: 'At least one product image is required.' });
-    }
+    // Upload new images if any are provided
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const result = await cloudinary.uploader.upload(file.path, { folder: 'products' });
+        deleteLocalFile(file.path);
+        finalImages.push({ url: result.secure_url, public_id: result.public_id });
+      }
+    }
+    
+    updateFields.images = finalImages;
+    
+    const updatedProduct = await Product.findByIdAndUpdate(productId, { $set: updateFields }, { new: true, runValidators: true });
 
-    updateFields.images = newImages;
-
-    const updatedProduct = await Product.findByIdAndUpdate(productId, { $set: updateFields }, { new: true, runValidators: true });
-
-    res.status(200).json(updatedProduct);
-  } catch (error) {
-    console.error('Update product error:', error);
-    res.status(500).json({ message: 'Server error while updating product.' });
-  }
+    res.status(200).json(updatedProduct);
+  } catch (error) {
+    console.error('Update product error:', error);
+    // Ensure temp files are deleted even if an error occurs mid-process
+    if (req.files) req.files.forEach(file => deleteLocalFile(file.path));
+    res.status(500).json({ message: 'Server error while updating product.' });
+  }
 };
 
 const deleteProduct = async (req, res) => {
