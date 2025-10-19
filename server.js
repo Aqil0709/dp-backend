@@ -1,5 +1,3 @@
-// --- server.js ---
-
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -29,28 +27,41 @@ const PORT = process.env.PORT || 5002;
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: [process.env.FRONTEND_URL || 'https://aaisahebvastram.com', 'http://localhost:3000'],
-    methods: ["GET", "POST"]
-  }
+  cors: {
+    origin: [process.env.FRONTEND_URL || 'https://aaisahebvastram.com', 'http://localhost:3000'],
+    methods: ["GET", "POST"]
+  }
 });
 
 // --- CORS Configuration ---
+
+// FIX: Add the new deployed frontend URL here. If you are using Render,
+// this MUST be the full domain of your client application.
+const newDeployedFrontendUrl = 'https://aaisahebvastram.com'; // <<<< CHANGE THIS LINE!
+
 const allowedOrigins = [
-    process.env.FRONTEND_URL || 'https://aaisahebvastram.com',
-    'http://localhost:3000'
-];
+    // This uses the environment variable, or the default if the variable is not set.
+    process.env.FRONTEND_URL,
+    'https://aaisahebvastram.com',
+    'http://localhost:3000',
+    // Add the new URL from the environment variable check or the one you identified
+    newDeployedFrontendUrl
+].filter(Boolean); // .filter(Boolean) removes any null or undefined entries safely
+
 const corsOptions = {
-    origin: function (origin, callback) {
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    origin: function (origin, callback) {
+        // If the origin is null (e.g., direct API tool calls or same-origin requests in non-browser environments) or if it's in the allowed list, proceed.
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            // This is the error handler that was triggered in your logs.
+            console.error(`CORS Blocked: Request origin ${origin} not in allowed list.`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
 };
 app.use(cors(corsOptions));
 
@@ -61,8 +72,8 @@ app.use(express.urlencoded({ extended: true }));
 // --- NEW: Middleware to make Socket.IO instance available in all routes ---
 // This must be placed BEFORE your API routes.
 app.use((req, res, next) => {
-  req.io = io;
-  next();
+  req.io = io;
+  next();
 });
 
 // --- API ROUTES ---
@@ -82,54 +93,53 @@ app.use('/api/wishlist', wishlistRoutes);
 // --- REAL-TIME LOGIC (VISITORS & NOTIFICATIONS) ---
 let onlineVisitors = 0;
 const getMonthlyVisitors = () => {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const monthlySeed = (year * 12 + month);
-    const monthlyFluctuation = (monthlySeed * 137) % 5000;
-    return 11000 + monthlyFluctuation;
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const monthlySeed = (year * 12 + month);
+    const monthlyFluctuation = (monthlySeed * 137) % 5000;
+    return 11000 + monthlyFluctuation;
 };
 
 const emitVisitorStats = () => {
-    const stats = {
-        online: onlineVisitors,
-        monthly: getMonthlyVisitors()
-    };
-    io.emit('visitorStatsUpdate', stats);
+    const stats = {
+        online: onlineVisitors,
+        monthly: getMonthlyVisitors()
+    };
+    io.emit('visitorStatsUpdate', stats);
 };
 
 io.on('connection', (socket) => {
-  // --- Existing Visitor Stats Logic ---
-  onlineVisitors++;
-  console.log(`A user connected. Total online: ${onlineVisitors}`);
-  emitVisitorStats();
+  // --- Existing Visitor Stats Logic ---
+  onlineVisitors++;
+  console.log(`A user connected. Total online: ${onlineVisitors}`);
+  emitVisitorStats();
 
-  // --- NEW: Admin Notification Room Logic ---
-  // This listens for an admin client joining their dedicated room.
-  socket.on('join_admin_room', () => {
-    socket.join('admins');
-    console.log(`Socket ${socket.id} joined the admin notification room.`);
-  });
+  // --- NEW: Admin Notification Room Logic ---
+  // This listens for an admin client joining their dedicated room.
+  socket.on('join_admin_room', () => {
+    socket.join('admins');
+    console.log(`Socket ${socket.id} joined the admin notification room.`);
+  });
 
-  // --- Existing Disconnect Logic ---
-  socket.on('disconnect', () => {
-    onlineVisitors--;
-    console.log(`A user disconnected. Total online: ${onlineVisitors}`);
-    emitVisitorStats();
-  });
+  // --- Existing Disconnect Logic ---
+  socket.on('disconnect', () => {
+    onlineVisitors--;
+    console.log(`A user disconnected. Total online: ${onlineVisitors}`);
+    emitVisitorStats();
+  });
 });
 
 // --- Fallback and Error Handler ---
 app.use((req, res, next) => {
-    res.status(404).json({ message: 'API Route not found' });
+    res.status(404).json({ message: 'API Route not found' });
 });
 app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ message: 'Something went wrong!', error: err.message });
+    console.error(err.stack);
+    res.status(500).json({ message: 'Something went wrong!', error: err.message });
 });
 
 // --- SERVER START ---
 server.listen(PORT, () => {
-    console.log(`Backend server with real-time support is running on port ${PORT}`);
+    console.log(`Backend server with real-time support is running on port ${PORT}`);
 });
-
