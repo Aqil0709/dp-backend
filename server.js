@@ -28,24 +28,23 @@ const PORT = process.env.PORT || 5002;
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: [process.env.FRONTEND_URL || 'https://aaisahebvastram.com', 'http://localhost:3000'],
+    origin: [
+        process.env.FRONTEND_URL || 'https://aaisahebvastram.com',
+        'http://localhost:3000',
+        'https://www.aaisahebvastram.com' // Added www version for Socket.IO
+    ],
     methods: ["GET", "POST"]
   }
 });
 
 // --- CORS Configuration ---
 
-// FIX: Add the new deployed frontend URL here. If you are using Render,
-// this MUST be the full domain of your client application.
-const newDeployedFrontendUrl = 'https://aaisahebvastram.com'; // <<<< CHANGE THIS LINE!
-
 const allowedOrigins = [
     // This uses the environment variable, or the default if the variable is not set.
     process.env.FRONTEND_URL,
     'https://aaisahebvastram.com',
+    'https://www.aaisahebvastram.com', // FIX: Explicitly added the 'www' domain which was failing.
     'http://localhost:3000',
-    // Add the new URL from the environment variable check or the one you identified
-    newDeployedFrontendUrl
 ].filter(Boolean); // .filter(Boolean) removes any null or undefined entries safely
 
 const corsOptions = {
