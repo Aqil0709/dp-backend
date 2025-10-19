@@ -108,7 +108,6 @@ const updateProduct = async (req, res) => {
             updateOps.$set.price = parsedPrice;
         }
 
-        // --- FIX: Use $unset for robustly removing originalPrice ---
         if (originalPrice !== undefined) {
             if (originalPrice === '' || originalPrice === null) {
                 updateOps.$unset.originalPrice = 1; // Use $unset to remove the field
@@ -129,9 +128,9 @@ const updateProduct = async (req, res) => {
             updateOps.$set.quantity = parsedQuantity;
         }
 
-        if (name) updateOps.$set.name = name;
-        if (category) updateOps.$set.category = category;
-        if (description) updateOps.$set.description = description;
+        if (name !== undefined) updateOps.$set.name = name;
+        if (category !== undefined) updateOps.$set.category = category;
+        if (description !== undefined) updateOps.$set.description = description;
         if (isSpecial !== undefined) updateOps.$set.isSpecial = isSpecial === 'true';
         if (isTrending !== undefined) updateOps.$set.isTrending = isTrending === 'true';
 
@@ -163,14 +162,18 @@ const updateProduct = async (req, res) => {
             }
         }
         
+        // --- FINAL FIX: Prevent saving a product with no images ---
+        if (finalImages.length === 0) {
+            // Clean up any newly uploaded temp files before erroring out
+            if (req.files) req.files.forEach(file => deleteLocalFile(file.path));
+            return res.status(400).json({ message: 'A product must have at least one image.' });
+        }
         updateOps.$set.images = finalImages;
         
-        // Clean up empty operators before updating
         if (Object.keys(updateOps.$set).length === 0) delete updateOps.$set;
         if (Object.keys(updateOps.$unset).length === 0) delete updateOps.$unset;
 
-        if (Object.keys(updateOps).length === 0) {
-            // If no fields were changed, just return the product without updating
+        if (Object.keys(updateOps).length === 0 && (!req.files || req.files.length === 0)) {
             return res.status(200).json(product);
         }
 
@@ -178,10 +181,16 @@ const updateProduct = async (req, res) => {
 
         res.status(200).json(updatedProduct);
     } catch (error) {
-        // --- FIX: Enhanced error logging for better debugging ---
+        if (req.files) req.files.forEach(file => deleteLocalFile(file.path));
+
+        if (error.name === 'ValidationError') {
+            console.error(`Mongoose Validation Error for product ID [${productId}]:`, error.message);
+            const messages = Object.values(error.errors).map(val => val.message);
+            return res.status(400).json({ message: `Validation failed: ${messages.join(', ')}` });
+        }
+        
         console.error(`Update product error for ID [${productId}]:`, error);
         console.error('Attempted update operations:', JSON.stringify(updateOps, null, 2));
-        if (req.files) req.files.forEach(file => deleteLocalFile(file.path));
         res.status(500).json({ message: 'Server error while updating product.' });
     }
 };
@@ -193,7 +202,6 @@ const deleteProduct = async (req, res) => {
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ message: 'Product not found.' });
 
-    // ✅ Delete images from Cloudinary
     for (const img of product.images) {
       if (img.public_id) await cloudinary.uploader.destroy(img.public_id);
     }
