@@ -7,7 +7,7 @@ const storage = new CloudinaryStorage({
   cloudinary,
   params: {
     folder: "products", // Cloudinary me ek folder banega
-    allowed_formats: ["jpeg", "jpg", "png", "webp"],
+    allowed_formats: ["jpeg", "jpg", "png", "webp", "mp4"],
     transformation: [{ width: 1200, height: 1200, crop: "limit" }],
   },
 });
