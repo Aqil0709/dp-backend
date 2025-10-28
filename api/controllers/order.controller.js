@@ -94,7 +94,7 @@ const generateInvoicePdf = (doc, order) => {
 
     // --- Seller & Invoice Details ---
     const topSectionY = doc.y;
-    doc.fontSize(9).font('Helvetica-Bold').text('AAISAHEB VASTRAM', pageMargin, topSectionY, { width: halfWidth });
+    doc.fontSize(9).font('Helvetica-Bold').text('Appa Pan Shop', pageMargin, topSectionY, { width: halfWidth });
     doc.font('Helvetica').text('D/404, SILVER STONE, NEAR RECREATION HALL,', { width: halfWidth });
     doc.text('DEVARATNA COMPLEX, GANDHI STATUE, THANE', { width: halfWidth });
     doc.text('Thane - 416115, Maharashtra, India', { width: halfWidth });
@@ -240,7 +240,7 @@ const generateInvoicePdf = (doc, order) => {
     doc.font('Helvetica-Bold').fontSize(9).text('Declaration', pageMargin, y, {underline: true});
     doc.font('Helvetica').text('We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.', pageMargin, doc.y, {width: halfWidth});
 
-    doc.font('Helvetica-Bold').text('for AAISAHEB VASTRAM', rightColX, y, {align: 'center', width: halfWidth});
+    doc.font('Helvetica-Bold').text('for Appa Pan Shop', rightColX, y, {align: 'center', width: halfWidth});
     doc.strokeColor('#333333').lineWidth(1).moveTo(rightColX + 20, y + 60).lineTo(rightColX + halfWidth - 20, y + 60).stroke();
     doc.text('Authorised Signatory', rightColX, y + 65, {align: 'center', width: halfWidth});
     
